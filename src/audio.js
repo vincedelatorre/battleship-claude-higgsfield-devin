@@ -14,6 +14,10 @@ export class Audio {
     const comp = this.ctx.createDynamicsCompressor();
     this.master.connect(comp).connect(this.ctx.destination);
     this._synthAll();
+    // Build the ambience loops just after the gesture that started audio, so that press stays instant.
+    setTimeout(() => this._startLoops(), 30);
+  }
+  _startLoops() {
     for (const k of ['rain', 'wind', 'sea']) {
       const src = this.ctx.createBufferSource();
       src.buffer = this._get(k); src.loop = true;

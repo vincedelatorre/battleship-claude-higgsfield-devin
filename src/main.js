@@ -62,7 +62,7 @@ function boot() {
     last = now;
     game.update(dt);
     world.update(game.worldDt(dt), game.input());
-    if (!window.__noRender) world.render();
+    if (!window.__noRender && !game.worldHidden()) world.render();
     game.draw(ctx, dpr);
     if (!shown) { shown = true; setTimeout(() => document.getElementById('loading').classList.add('done'), 300); }
     requestAnimationFrame(frame);

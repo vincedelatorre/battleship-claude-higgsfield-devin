@@ -400,13 +400,18 @@ export class CrewDirector {
     // Galleons are seen at a distance: no shadow casting (the costliest part of the shadow pass).
     model.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
     // Deck height along the keel: the lowest upward-facing surface seen from above.
-    const ray = new THREE.Raycaster(), deck = [];
-    for (let i = 0; i <= 24; i++) {
-      const x = (i / 24 - 0.5) * ship.Ls;
-      ray.set(new THREE.Vector3(x, 400, 0), new THREE.Vector3(0, -1, 0));
-      const hits = ray.intersectObject(wrap, true).filter((h) => h.face && h.face.normal.clone().transformDirection(h.object.matrixWorld).y > 0.6);
-      deck.push(hits.length ? hits[hits.length - 1].point.y : null);
+    // Deck profile of the model, measured once (unit scale) and scaled to each ship after that.
+    if (!this._deckNorm) {
+      const ray = new THREE.Raycaster(), norm = [];
+      for (let i = 0; i <= 24; i++) {
+        const x = (i / 24 - 0.5) * ship.Ls;
+        ray.set(new THREE.Vector3(x, 400, 0), new THREE.Vector3(0, -1, 0));
+        const hits = ray.intersectObject(wrap, true).filter((h) => h.face && h.face.normal.clone().transformDirection(h.object.matrixWorld).y > 0.6);
+        norm.push(hits.length ? (hits[hits.length - 1].point.y + 2.6) / s : null);
+      }
+      this._deckNorm = norm;
     }
+    const deck = this._deckNorm.map((v) => (v === null ? null : v * s - 2.6));
     if (deck.filter((v) => v !== null).length < 8) return; // model didn't measure cleanly: keep the procedural ship
     for (let i = 0; i < deck.length; i++) if (deck[i] === null) deck[i] = deck[i - 1] ?? deck.find((v) => v !== null);
     // Keep both looks and switch between them: the generated galleon for ships seen from a

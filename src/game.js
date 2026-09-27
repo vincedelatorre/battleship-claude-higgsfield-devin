@@ -72,7 +72,14 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- screens
-  _syncKeyArt() { $('#keyart').classList.toggle('on', !!this.keyArt && this.screen === 'title'); }
+  _syncKeyArt() {
+    const on = !!this.keyArt && this.screen === 'title';
+    const el = $('#keyart');
+    if (on && !el.classList.contains('on')) this._artShownAt = performance.now();
+    el.classList.toggle('on', on);
+  }
+  // The key art is opaque once its 1.4 s fade-in finishes: nothing behind it needs drawing.
+  worldHidden() { return this.screen === 'title' && !!this.keyArt && performance.now() - (this._artShownAt || 0) > 1600; }
 
   _showScreen(s) {
     this.screen = s;
@@ -86,12 +93,19 @@ export class Game {
   }
 
   _bindUI() {
+    // Captain cards respond on press (not release) and only move the highlight: instant feedback.
+    document.body.addEventListener('pointerdown', (e) => {
+      const cap = e.target.closest('[data-cap]')?.dataset.cap;
+      if (cap === undefined || e.button > 0) return;
+      this.audio.start();
+      if (Number(cap) !== this.sel) { this.sel = Number(cap); ui.selectCard(this.sel); this.audio.play('click'); }
+    });
     document.body.addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
-      const cap = e.target.closest('[data-cap]')?.dataset.cap;
+      const cap = e.detail === 0 ? e.target.closest('[data-cap]')?.dataset.cap : undefined;   // keyboard activation
       const mode = e.target.closest('[data-mode]')?.dataset.mode;
       this.audio.start();
-      if (cap !== undefined) { this.sel = Number(cap); ui.selectCard(this.sel); this.audio.play('click'); this._demoMatch(); }
+      if (cap !== undefined) { this.sel = Number(cap); ui.selectCard(this.sel); this.audio.play('click'); }
       if (mode) { this.mode = mode; document.querySelectorAll('[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === mode))); ui.renderCards(this.sel, this.mode); this.audio.play('click'); }
       if (e.target.closest('#setsail')) this.startPlacement();
       const dock = e.target.closest('[data-dock]');
@@ -603,7 +617,7 @@ export class Game {
     if (lk === 'k') { this.world.comfort = !this.world.comfort; ui.toast(this.world.comfort ? 'Comfort mode on: less shake, steady horizon' : 'Comfort mode off'); }
     if (lk === 'f') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
     if (this.screen === 'title') {
-      if (k === 'ArrowRight' || k === 'ArrowLeft') { this.sel = (this.sel + (k === 'ArrowRight' ? 1 : 3)) % 4; ui.selectCard(this.sel); this.audio.play('click'); this._demoMatch(); }
+      if (k === 'ArrowRight' || k === 'ArrowLeft') { this.sel = (this.sel + (k === 'ArrowRight' ? 1 : 3)) % 4; ui.selectCard(this.sel); this.audio.play('click'); }
       if (k === 'Enter') this.startPlacement();
     }
     if (this.screen === 'placement') {
@@ -812,7 +826,8 @@ export class Game {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     if (this.screen === 'title' && this.keyArt) {
-      $('#keyart').style.filter = `brightness(${(1 + w.sky.flash * 0.9).toFixed(3)}) contrast(${(1 + w.sky.flash * 0.15).toFixed(3)})`;
+      const f = w.sky.flash > 0.004 ? `brightness(${(1 + w.sky.flash * 0.9).toFixed(2)}) contrast(${(1 + w.sky.flash * 0.15).toFixed(2)})` : '';
+      if (f !== this._artFilter) { this._artFilter = f; $('#keyart').style.filter = f; }
       this._drawRain(ctx);
     }
     const chartScreens = this.screen === 'placement' || this.screen === 'battle' || this.screen === 'over';
