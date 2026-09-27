@@ -68,6 +68,7 @@ export function probeArt(url) {
 
 export function renderCards(sel, mode) {
   const el = $('#cards');
+  requestAnimationFrame(() => selectCard(sel));
   el.classList.toggle('std', mode === Mode.Standard);
   el.innerHTML = CAPTAINS.map((c, i) => `
     <button class="panel card" data-cap="${i}" aria-pressed="${i === sel}" style="--cap:${cssHex(c.color)}">
@@ -78,7 +79,13 @@ export function renderCards(sel, mode) {
     </button>`).join('');
 }
 export function selectCard(sel) {
-  document.querySelectorAll('#cards .card').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.cap) === sel)));
+  document.querySelectorAll('#cards .card').forEach((b) => {
+    const on = Number(b.dataset.cap) === sel;
+    b.setAttribute('aria-pressed', String(on));
+    // Only the selected captain's clip plays; the others hold their frame (one video decoding, not four).
+    const v = b.querySelector('video.clip');
+    if (v) { if (on) v.play?.().catch(() => {}); else v.pause?.(); }
+  });
 }
 
 export function capMini(el, ci, status, cls = '') {

@@ -56,13 +56,18 @@ function boot() {
   addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('blur', () => { game.keys = {}; });
 
-  let last = performance.now(), shown = false;
+  let last = performance.now(), shown = false, hiddenTick = 0, hiddenDt = 0, glHidden = false;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     game.update(dt);
-    world.update(game.worldDt(dt), game.input());
-    if (!window.__noRender && !game.worldHidden()) world.render();
+    // Behind the opaque title art the 3D world is invisible: update it at a quarter rate, draw nothing.
+    const hidden = game.worldHidden();
+    hiddenDt += game.worldDt(dt);
+    if (!hidden || ++hiddenTick % 4 === 0) { world.update(hidden ? Math.min(hiddenDt, 0.1) : game.worldDt(dt), game.input()); hiddenDt = 0; }
+    if (!window.__noRender && !hidden) world.render();
+    // A covered full-screen WebGL canvas still costs compositing: take it out of the page while hidden.
+    if (hidden !== glHidden) { glHidden = hidden; world.canvas.style.visibility = hidden ? 'hidden' : ''; }
     game.draw(ctx, dpr);
     if (!shown) { shown = true; setTimeout(() => document.getElementById('loading').classList.add('done'), 300); }
     requestAnimationFrame(frame);

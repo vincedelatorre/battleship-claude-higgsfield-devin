@@ -823,6 +823,8 @@ export class Game {
   // Chart overlays for this frame.
   draw(ctx, dpr) {
     const w = this.world;
+    // Title rain is redrawn at 30 fps: plenty for streaks, half the full-screen canvas uploads.
+    if (this.screen === 'title' && this.keyArt && (this._rainTick = (this._rainTick || 0) + 1) % 2) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
     if (this.screen === 'title' && this.keyArt) {

@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
 <style>
 :root {
-  --storm: #0c161c; --panel: rgba(12, 22, 28, 0.78); --brass: #c9a15b; --brass-dim: rgba(201, 161, 91, 0.35);
+  --storm: #0c161c; --panel: rgba(12, 22, 28, 0.78); --panel-solid: rgba(10, 18, 23, 0.88); --brass: #c9a15b; --brass-dim: rgba(201, 161, 91, 0.35);
   --sail: #e9dfc7; --sail-dim: #a99f89; --ember: #e0602f; --blood: #b3362b; --sea: #6fb0a8;
   --display: "IM Fell English SC", "Iowan Old Style", Georgia, serif;
   --body: "IM Fell English", "Iowan Old Style", Georgia, serif;
@@ -23,7 +23,8 @@ button { font: inherit; color: inherit; }
 .hidden { display: none !important; }
 .layer { position: fixed; inset: 0; pointer-events: none; }
 .layer > * { pointer-events: auto; }
-.panel { background: var(--panel); border: 1px solid var(--brass-dim); border-radius: 3px; -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+/* No backdrop blur: re-blurring the moving key art behind every panel each frame was the main source of menu lag. */
+.panel { background: var(--panel-solid); border: 1px solid var(--brass-dim); border-radius: 3px; }
 h1, h2, h3 { font-family: var(--display); font-weight: normal; margin: 0; }
 
 /* Buttons: brass-rimmed, sailcloth text; the primary action gets the ember fill. */
@@ -171,7 +172,8 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 
 /* key art title, versus intro, winner portrait */
 #keyart { position: fixed; inset: 0; background: #04080a center 35% / cover no-repeat; opacity: 0; transition: opacity 1.4s; pointer-events: none; }
-#keyart.on { opacity: 1; animation: kenburns 38s ease-in-out infinite alternate; }
+/* Static key art: the continuous zoom forced a full-screen repaint every frame. */
+#keyart.on { opacity: 1; }
 #keyart::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 30%, rgba(4,8,10,0) 30%, rgba(4,8,10,0.55) 100%); }
 @keyframes kenburns { from { transform: scale(1.02); } to { transform: scale(1.1) translate(-1%, 1%); } }
 #versus { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; pointer-events: none; background: linear-gradient(90deg, rgba(4,8,10,0.85), rgba(4,8,10,0.45) 50%, rgba(4,8,10,0.85)); transition: opacity 0.6s; }
