@@ -1,0 +1,74 @@
+# Captain's Gambit (web edition)
+
+Pirate Battleship with a twist: four captains, each with one Gambit per battle, fought in a
+storm at sea. Rewritten from the C++/DirectX version as a three.js web game, so it runs in any
+current browser, including Safari and Chrome on a Mac.
+
+## Play
+
+```
+npm install
+npm run dev        # opens the game in your browser
+```
+
+Or build one self-contained file you can double-click or host anywhere:
+
+```
+npm run build:single   # -> dist-single/captains-gambit.html
+```
+
+## Art
+
+All art was generated with Higgsfield and ships with the project in `public/assets/`:
+captain portraits (`portraits/`), each captain's 8-second performance clip (`video/`, looping,
+first and last frame match the portrait), the title key art (`ui/title.jpg`) and the four painted
+Gambit emblems cropped from the captain-select concept art (`gambits/`). To swap a piece, drop
+a new `.jpg` with the same name in place; `npm run build:single` embeds everything.
+
+## Controls
+
+- Chart: click to fire. `G` uses your Gambit. Right-click or `Esc` cancels aiming.
+- `Tab` boards your ship: you start at the helm on the quarterdeck; take the stairs down to the main deck. `W A S D` walk, mouse to look (click, or drag), `1`–`5` change ship,
+  `Q` opens the sea chart to fire from the deck.
+- `K` comfort mode (less shake, steady horizon), `M` mute, `F` full screen, `Esc` menu, `F1` help.
+
+## How it's built
+
+| File | What it does |
+| --- | --- |
+| `src/rules.js` | Rules engine: Hasbro Battleship plus all four Gambits. No browser code. |
+| `src/ai.js` | Computer captain (probability-density hunting; plays Gambits at sensible moments). |
+| `src/ocean.js` | 3-cascade FFT ocean on the GPU: 617 m, 97.3 m and 16.1 m patches (non-harmonic, so no visible tiling), JONSWAP storm spectrum plus a crossing swell, choppy displacement, Jacobian foam that persists and decays. A CPU copy of the big swells drives ship motion. |
+| `src/sky.js` | Storm sky (wind-driven cloud decks lit by lightning) and branching lightning bolts. |
+| `src/world.js` | The 3D battle: procedural ships and crew, fires, spray, rain, cannonballs, lights, post-processing (bloom, grade, grain), and the camera: chart view, deck view and the swoop between them. |
+| `src/overlay.js` | The chart layer: grid, marks and aiming aids projected over the live 3D sea, plus flat charts. |
+| `src/game.js` | Game controller: screens, placement, turns, Gambits, and the beat timeline that reveals each shot only when the ball lands. |
+| `src/portraits.js` | Living portraits: one WebGL2 shader animates every visible captain (breathing, head sway, wind in hair, lantern flicker, fuse embers, ghost-light eyes, rain and lightning). Falls back to the still image without WebGL or with reduced motion. |
+| `src/crew.js` | The crew: eight rigged pirates generated with Higgsfield (image to 3D, auto-rigged), sharing walk, talk and hit-reaction clips by bone name; wandering, gathering in small groups that talk with gestures (no dialogue text or audio), fire-fighting when hit. A random five crew each ship every battle. Other ships use the generated galleon model; the ship you're aboard keeps its walkable built deck. |
+| `scripts/import-crew.mjs` | Imports downloaded Higgsfield models: recognises each by job id, simplifies meshes, compresses textures (meshopt + JPEG) so the crew fits in the single-file game. |
+| `src/audio.js` | Every sound synthesized with WebAudio at startup (no audio files). |
+| `index.html` | Page structure and all UI styling. |
+
+Sky and light: a split sky, sunset breaking through on one side and a raining, lightning-lit storm
+on the other, blended through torn cloud. The low sun is the key light and casts long shadows; lanterns and fires are warm
+point lights; a filmic grade after tone mapping adds contrast (S-curve) and splits teal
+shadows from warm highlights.
+
+The chart is the same 3D world seen from straight above, so your ships in the chart are the
+real ships riding the swell, and `Tab` flies the camera down onto the deck.
+
+## Tests
+
+```
+npm test           # 356 rules and AI checks
+npm run balance    # AI-vs-AI win rates per captain
+```
+
+Gambits are ready from turn one. To bring back the old "unlock on first hit" rule, set
+`unlockOnFirstHit = true` in `src/rules.js` (the balance report shows both settings).
+
+## Requirements
+
+WebGL 2 with float render targets (every current desktop browser; turn on hardware
+acceleration if it's off). The ocean runs 3 x 256x256 FFTs per frame, so a laptop GPU is
+plenty; integrated graphics on older machines may prefer a smaller window.
