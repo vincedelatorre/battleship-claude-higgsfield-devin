@@ -33,11 +33,10 @@ function placeholder(ci) {
 export function portrait(ci) {
   const src = artUrl(CAPTAINS[ci].portrait);
   const vid = videoUrl(CAPTAINS[ci].portrait);
-  // Layers: painted placeholder < still portrait < shader animation < Higgsfield performance clip.
-  // The clip only shows once it is actually playing; if it can't play, the shader stays.
+  // Layers: painted placeholder < still portrait < Higgsfield performance clip (shown once playing).
   const clip = vid && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
     ? `<video class="clip" src="${vid}" muted loop playsinline autoplay preload="auto" aria-hidden="true" onplaying="this.classList.add('on')" onerror="this.remove()"></video>` : '';
-  return `<div class="portrait">${placeholder(ci)}${src ? `<img alt="Portrait of ${CAPTAINS[ci].name}" src="${src}" onerror="this.remove()"><canvas class="live" data-cap="${ci}" aria-hidden="true"></canvas>` : ''}${clip}</div>`;
+  return `<div class="portrait">${placeholder(ci)}${src ? `<img alt="Portrait of ${CAPTAINS[ci].name}" src="${src}" onerror="this.remove()">` : ''}${clip}</div>`;
 }
 
 // Animated portrait clip (Higgsfield video): embedded clips become blob URLs once, otherwise

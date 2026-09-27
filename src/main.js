@@ -2,7 +2,6 @@
 import { World } from './world.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
-import { LivingPortraits } from './portraits.js';
 import { CrewDirector } from './crew.js';
 
 const gl = document.getElementById('gl');
@@ -36,7 +35,6 @@ function boot() {
     world.ocean.frozen = false;
     return game.screen;
   };
-  const portraits = new LivingPortraits();
   const ctx = overlay.getContext('2d');
   let dpr = 1;
 
@@ -66,7 +64,6 @@ function boot() {
     world.update(game.worldDt(dt), game.input());
     if (!window.__noRender) world.render();
     game.draw(ctx, dpr);
-    portraits.update(now, world.sky.flash);
     if (!shown) { shown = true; setTimeout(() => document.getElementById('loading').classList.add('done'), 300); }
     requestAnimationFrame(frame);
   }

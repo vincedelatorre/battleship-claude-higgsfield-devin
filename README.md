@@ -43,7 +43,6 @@ a new `.jpg` with the same name in place; `npm run build:single` embeds everythi
 | `src/world.js` | The 3D battle: procedural ships and crew, fires, spray, rain, cannonballs, lights, post-processing (bloom, grade, grain), and the camera: chart view, deck view and the swoop between them. |
 | `src/overlay.js` | The chart layer: grid, marks and aiming aids projected over the live 3D sea, plus flat charts. |
 | `src/game.js` | Game controller: screens, placement, turns, Gambits, and the beat timeline that reveals each shot only when the ball lands. |
-| `src/portraits.js` | Living portraits: one WebGL2 shader animates every visible captain (breathing, head sway, wind in hair, lantern flicker, fuse embers, ghost-light eyes, rain and lightning). Falls back to the still image without WebGL or with reduced motion. |
 | `src/crew.js` | The crew: eight rigged pirates generated with Higgsfield (image to 3D, auto-rigged), sharing walk, talk and hit-reaction clips by bone name; wandering, gathering in small groups that talk with gestures (no dialogue text or audio), fire-fighting when hit. A random five crew each ship every battle. Other ships use the generated galleon model; the ship you're aboard keeps its walkable built deck. |
 | `scripts/import-crew.mjs` | Imports downloaded Higgsfield models: recognises each by job id, simplifies meshes, compresses textures (meshopt + JPEG) so the crew fits in the single-file game. |
 | `src/audio.js` | Every sound synthesized with WebAudio at startup (no audio files). |

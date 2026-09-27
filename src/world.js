@@ -496,7 +496,7 @@ export class World {
   constructor(canvas) {
     this.canvas = canvas;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.4;
     this.renderer.shadowMap.enabled = true;
@@ -579,7 +579,6 @@ export class World {
 
     this.fleets = [[], []];       // ShipModel per ship index for each side
     this.flagship = null;
-    this.crew = [];
     this.fires = [];              // {side, ship, seg} for my hits, {pos} for enemy-water fires
     this.balls = [];
     this.time = 0;
@@ -691,67 +690,8 @@ export class World {
   }
 
   _buildCrew() {
-    for (const c of this.crew) c.mesh.parent?.remove(c.mesh);
-    this.crew = [];
     const ship = this.fleets[0][this.pov];
-    if (!ship) return;
-    if (this.crewDirector?.ready) { this.crewDirector.attach(ship, this.pov); return; }
-    const shirts = [0x6b2a22, 0x2c3a5a, 0x3d4a3a, 0x5a4a38, 0x7a6a50];
-    const skins = [0x8a5a3c, 0xc99a78, 0x5a3a26, 0xa87858];
-    const n = Math.min(14, 4 + ship.len * 2);
-    let gun = 0;
-    for (let i = 0; i < n; i++) {
-      const shirt = new THREE.MeshStandardMaterial({ color: shirts[i % 5], roughness: 0.9 });
-      const skin = new THREE.MeshStandardMaterial({ color: skins[i % 4], roughness: 0.7 });
-      const dark = new THREE.MeshStandardMaterial({ color: 0x1c1a18, roughness: 0.9 });
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 0.55, 4, 8), shirt); body.position.y = 1.25; g.add(body);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 8), skin); head.position.y = 1.78; g.add(head);
-      { const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.12, 8), dark); hat.position.y = 1.93; g.add(hat); }
-      const limb = (r, l, mat, x, y, z) => { const pv = new THREE.Group(); pv.position.set(x, y, z); const mm = new THREE.Mesh(new THREE.CapsuleGeometry(r, l, 3, 6), mat); mm.position.y = -l / 2 - r; pv.add(mm); g.add(pv); return pv; };
-      const legs = [limb(0.1, 0.62, dark, 0, 0.9, -0.12), limb(0.1, 0.62, dark, 0, 0.9, 0.12)];
-      const arms = [limb(0.07, 0.5, shirt, 0, 1.55, -0.33), limb(0.07, 0.5, shirt, 0, 1.55, 0.33)];
-      const c = { mesh: g, legs, arms, phase: Math.random() * 6, lean: 0, leanV: 0, recoil: 0, speed: 1.4 + Math.random(), timer: 0, face: 0 };
-      if (i < n / 2 && gun < ship.cannons.length) {
-        const cp = ship.cannons[gun];
-        c.state = 'gun'; c.x = cp.x; c.z = cp.z - Math.sign(cp.z) * 2.6; c.face = cp.z > 0 ? Math.PI / 2 : -Math.PI / 2;
-        gun += 2 + (i % 2);
-      } else if (i === Math.floor(n / 2)) { c.state = 'helm'; c.x = (0.2 - 0.5) * ship.Ls; c.z = 0; }
-      else { c.state = i % 3 === 0 ? 'haul' : 'walk'; const t = 0.3 + Math.random() * 0.5; c.x = (t - 0.5) * ship.Ls; c.z = (Math.random() - 0.5) * ship.halfWidth(t); c.tx = c.x; c.tz = c.z; }
-      g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-      ship.root.add(g);
-      this.crew.push(c);
-    }
-  }
-
-  _updateCrew(dt) {
-    if (this.crewDirector?.ready) return;
-    const ship = this.fleets[0][this.pov];
-    if (!ship) return;
-    for (const c of this.crew) {
-      c.leanV += (-c.lean * 30 - c.leanV * 5) * dt;
-      c.lean += c.leanV * dt;
-      c.recoil = Math.max(0, c.recoil - dt * 3);
-      let walking = false;
-      if (c.state === 'walk') {
-        const dx = c.tx - c.x, dz = c.tz - c.z, d = Math.hypot(dx, dz);
-        if (d < 0.3) {
-          c.timer -= dt;
-          if (c.timer <= 0) { const t = 0.25 + Math.random() * 0.6; c.tx = (t - 0.5) * ship.Ls; c.tz = (Math.random() - 0.5) * 1.4 * ship.halfWidth(t); c.timer = 1 + Math.random() * 3; }
-        } else {
-          const st = Math.min(d, c.speed * dt);
-          c.x += (dx / d) * st; c.z += (dz / d) * st; c.face = Math.atan2(dz, dx); walking = true;
-          c.phase += dt * c.speed * 5;
-        }
-      } else c.phase += dt * (c.state === 'haul' ? 4 : 1);
-      const t = clamp(c.x / ship.Ls + 0.5, 0, 1);
-      c.mesh.position.set(c.x, ship.deckY(t), c.z);
-      c.mesh.rotation.set(0, -c.face, c.lean);
-      const sw = walking ? Math.sin(c.phase) * 0.6 : 0;
-      c.legs[0].rotation.z = sw; c.legs[1].rotation.z = -sw;
-      const arm = walking ? -Math.sin(c.phase) * 0.7 : c.state === 'haul' ? Math.sin(c.phase * 1.5) * 0.8 - 1.5 : c.state === 'gun' ? -0.6 - c.recoil : 0.1 * Math.sin(c.phase);
-      c.arms[0].rotation.z = arm; c.arms[1].rotation.z = c.state === 'haul' || c.state === 'gun' ? arm : -arm;
-    }
+    if (ship && this.crewDirector?.ready) this.crewDirector.attach(ship, this.pov);
   }
 
   // ---------------------------------------------------------------- ship motion
@@ -988,7 +928,6 @@ export class World {
         else if (ok(w.x, w.z + mv.y)) w.z += mv.y;
         w.bob += dt * 7 * Math.min(1, this.walk.vel.length() / 2.8);
       }
-      this._updateCrew(dt);
       this._greenWater(dt);
     }
     if (this.crewDirector?.ready) this.crewDirector.update(dt, this.mode === 'deck' && !this.trans);
@@ -1129,7 +1068,6 @@ export class World {
       const back = new THREE.Vector3(-1, 0.9, 0).applyQuaternion(s.root.getWorldQuaternion(tmpQ)).normalize();
       for (let i = 0; i < 140; i++) this.alphaParts.emit({ p: bow.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 1.5, (Math.random() - 0.5) * 4)), v: back.clone().multiplyScalar(5 + Math.random() * 7).add(new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 6, (Math.random() - 0.5) * 6)), life: 0.9 + Math.random(), max: 1.9, s: 0.7 + Math.random() * 0.8, grow: 1.4, g: -11, drag: 0.4, c0: [0.62, 0.68, 0.72, 0.85], c1: [0.5, 0.55, 0.6, 0] });
       this.shake = Math.min(1.5, this.shake + 0.3);
-      for (const c of this.crew) c.leanV += (Math.random() - 0.5) * 8;
       this.onWaveCrash?.(Math.max(0.2, Math.min(1, 30 / Math.max(10, bow.distanceTo(this.camera.position)))));
     }
   }
@@ -1148,7 +1086,13 @@ export class World {
     for (const c of d.crew) c.obj.visible = deckView;
     // Depth precision for the high overhead camera: a near plane of 30 cm at 1 km up makes
     // nearby surfaces fight for the same pixels, so push it out when looking down from above.
-    const near = this.camera.position.y > 300 ? 20 : 0.3;
+    // Looking straight down from 1 km: the sky is out of view and shadows are invisible.
+    const overhead = this.camera.position.y > 300;
+    this.sky.mesh.visible = !overhead;
+    // Toggle shadows without changing the light setup (that would force a shader recompile).
+    this.renderer.shadowMap.autoUpdate = !overhead;
+    this.moon.shadow.intensity = overhead ? 0 : 1;
+    const near = overhead ? 20 : 0.3;
     if (this.camera.near !== near) { this.camera.near = near; this.camera.updateProjectionMatrix(); }
   }
 

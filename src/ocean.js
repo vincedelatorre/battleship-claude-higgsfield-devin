@@ -496,7 +496,7 @@ export class Ocean {
 
   update(dt) {
     this.time += dt;
-    if (this.frozen) { this.uniforms.uTime.value = this.time; this._updateCpu(); return; }
+    if (this.frozen) { this.uniforms.uTime.value = this.time; if ((this._cpuTick = (this._cpuTick || 0) + 1) % 3 === 1) this._updateCpu(); return; }
     const r = this.renderer;
     const prevTarget = r.getRenderTarget();
     const prevAutoClear = r.autoClear;
@@ -530,7 +530,8 @@ export class Ocean {
     U.uTime.value = this.time;
     U.uDetail.value = this.detail;
     U.uCalm.value = this.calm;
-    this._updateCpu();
+    // The CPU swell (ship motion only) changes slowly: refresh it every third frame.
+    if ((this._cpuTick = (this._cpuTick || 0) + 1) % 3 === 1) this._updateCpu();
   }
 
   // Evolve the low-frequency swell on the CPU (height and choppy displacement).

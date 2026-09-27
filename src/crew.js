@@ -108,25 +108,48 @@ class CrewMember {
     model.traverse((o) => { if (o.isBone && /toebase|toe$/.test(norm(o.name))) this.feet.push(o); });
     if (!this.feet.length) model.traverse((o) => { if (o.isBone && /foot$/.test(norm(o.name))) this.feet.push(o); });
     this._v = new THREE.Vector3();
-    // Boot soles: in the rest pose, the lowest vertices of the skinned body (the undersides of the
-    // boots). Each frame they're deformed exactly as the GPU does it, and the body is lifted so
-    // the lowest sole point rests on the planks. This tests the visible mesh, not the skeleton.
+    // Contact points: the boot vertices that are ever the lowest point in any pose of any clip.
+    // Found once per character (cached on the source model, shared by every copy), then checked
+    // each frame so the soles rest exactly on the planks at a fraction of the cost.
     this.soles = [];
-    model.updateMatrixWorld(true);
-    model.traverse((o) => {
-      if (!o.isSkinnedMesh) return;
-      const pos = o.geometry.attributes.position, v = new THREE.Vector3(), ys = [];
-      for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld); ys.push([v.y, i]); }
-      ys.sort((a, b) => a[0] - b[0]);
-      // Whole boots up to the ankle, so toe caps and heels count as they roll through the stride.
-      const span = ys[ys.length - 1][0] - ys[0][0], cut = ys[0][0] + span * 0.12;
-      const low = ys.filter(([y]) => y <= cut);
-      const step = Math.max(1, Math.floor(low.length / 500));
-      for (let k = 0; k < low.length; k += step) this.soles.push([o, low[k][1]]);
-    });
+    const meshes = [];
+    model.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+    if (!src._contact) src._contact = this._findContacts(model, meshes);
+    for (const [mi, i] of src._contact) if (meshes[mi]) this.soles.push([meshes[mi], i]);
     this.x = 0; this.z = 0; this.face = 0; this.target = null; this.speed = 1.2;
     this.state = 'idle'; this.timer = 1 + Math.random() * 4;
   }
+  _findContacts(model, meshes) {
+    const v = new THREE.Vector3(), inv = new THREE.Matrix4();
+    model.updateMatrixWorld(true);
+    // Candidates: boots up to the ankle in the rest pose.
+    const cand = [];
+    meshes.forEach((o, mi) => {
+      const pos = o.geometry.attributes.position, ys = [];
+      for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld); ys.push([v.y, i]); }
+      ys.sort((p, q) => p[0] - q[0]);
+      const cut = ys[0][0] + (ys[ys.length - 1][0] - ys[0][0]) * 0.12;
+      for (const [y, i] of ys) { if (y > cut) break; cand.push([mi, i]); }
+    });
+    // Pose the rig through every clip and keep whichever candidates come within 1.5 cm of the lowest point.
+    const hits = new Map(), mixer = new THREE.AnimationMixer(model);
+    const clips = Object.values(this.actions).map((a) => a.getClip()).filter((c, k, arr) => arr.indexOf(c) === k);
+    for (const clip of clips) {
+      const act = mixer.clipAction(clip); act.play();
+      for (let f = 0; f < 16; f++) {
+        act.time = (clip.duration * f) / 16; mixer.update(0);
+        model.updateMatrixWorld(true); inv.copy(model.matrixWorld).invert();
+        const ys = cand.map(([mi, i]) => { const o = meshes[mi]; v.fromBufferAttribute(o.geometry.attributes.position, i); o.applyBoneTransform(i, v); return v.applyMatrix4(o.matrixWorld).applyMatrix4(inv).y; });
+        const lo = Math.min(...ys);
+        ys.forEach((y, k) => { if (y < lo + 0.015) hits.set(k, (hits.get(k) || 0) + 1); });
+      }
+      act.stop();
+    }
+    mixer.stopAllAction(); mixer.uncacheRoot(model);
+    const keep = [...hits.entries()].sort((p, q) => q[1] - p[1]).slice(0, 160).map(([k]) => cand[k]);
+    return keep.length ? keep : cand.filter((_, k) => k % Math.max(1, Math.floor(cand.length / 120)) === 0);
+  }
+
   play(name, fade = 0.35, timeScale = 1) {
     const a = this.actions[name] || this.actions.idle;
     if (!a) return;
@@ -277,6 +300,8 @@ export class CrewDirector {
   }
 
   update(dt, talkative) {
+    // Nothing to animate while the crew are hidden (map views).
+    if (!this.crew.length || !this.crew[0].obj.visible) return;
     if (!this.crew.length) return;
     const s = this.ship;
     // Conversations: gather the speakers, face each other, then speak line by line.
@@ -372,7 +397,8 @@ export class CrewDirector {
     model.position.set(-c.x, -box.min.y, -c.z);
     wrap.position.y = -2.6;                         // sit the keel below the waterline
     wrap.updateMatrixWorld(true);
-    model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    // Galleons are seen at a distance: no shadow casting (the costliest part of the shadow pass).
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
     // Deck height along the keel: the lowest upward-facing surface seen from above.
     const ray = new THREE.Raycaster(), deck = [];
     for (let i = 0; i <= 24; i++) {
