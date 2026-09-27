@@ -10,7 +10,7 @@ export const Mark = { None: 0, Miss: 1, Hit: 2 };
 export const CAPTAINS = [
   { name: 'Captain Blackthorn', motto: 'Freedom, plunder, no masters', gambit: Gambit.Broadside, gambitName: 'Broadside',
     gambitDesc: 'Fire 3 shots at any 3 untried squares, one after another.', portrait: 'blackthorn', color: 0x3fa36b, sail: 0x2f5e3e },
-  { name: 'Captain Morrigan Vex', motto: 'Fire, smoke, ruin', gambit: Gambit.PowderKeg, gambitName: 'Powder Keg',
+  { name: 'Calavera', motto: 'Fire, smoke, ruin', gambit: Gambit.PowderKeg, gambitName: 'Powder Keg',
     gambitDesc: 'A plus-shaped blast on open water: the target and its 4 neighbours.', portrait: 'morrigan', color: 0xc8372d, sail: 0x7e2520 },
   { name: 'Captain Isla Crowe', motto: 'Wind, stars, horizon', gambit: Gambit.CrowsNest, gambitName: "Crow's Nest",
     gambitDesc: 'A free scout: learn how many ship squares lie in a 3x3 area, then fire.', portrait: 'isla', color: 0x3f83d1, sail: 0x2b4f7e },
