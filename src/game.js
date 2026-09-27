@@ -200,14 +200,17 @@ export class Game {
     this._showScreen('battle');
     this.audio.play('gong', { vol: 0.8 });
     this.addLog(first === 0 ? 'The battle begins. You have the first shot.' : 'The battle begins. The enemy fires first.');
-    this._versus(m);
-    this.queue(3.0, () => {}, () => { ui.banner('Battle stations', first === 0 ? 'You have the first shot' : 'The enemy fires first', false, 1800); this.audio.play('bell', { vol: 0.5 }); });
-    if (first === 0) { this.queue(0.2, () => this.pan(1, 1.2)); this.queue(1.3, () => {}, () => this.beginPlayerTurn()); }
-    else { this.queue(1.8, () => {}, () => this.beginAITurn()); }
+    // The battle opens once the versus intro has finished (both captains' clips played through).
+    this._versus(m, () => {
+      ui.banner('Battle stations', first === 0 ? 'You have the first shot' : 'The enemy fires first', false, 1800);
+      this.audio.play('bell', { vol: 0.5 });
+      if (first === 0) { this.queue(0.2, () => this.pan(1, 1.2)); this.queue(1.3, () => {}, () => this.beginPlayerTurn()); }
+      else { this.queue(1.8, () => {}, () => this.beginAITurn()); }
+    });
   }
 
   // Captain versus captain intro while the fleets close in.
-  _versus(m) {
+  _versus(m, done) {
     const v = $('#versus'), hex = (c) => '#' + c.toString(16).padStart(6, '0');
     const fill = (who, p) => {
       const c = CAPTAINS[m.side[p].captain];
@@ -218,8 +221,36 @@ export class Game {
     };
     fill('me', 0); fill('foe', 1);
     v.classList.remove('hidden', 'out');
-    clearTimeout(this._vsTimer);
-    this._vsTimer = setTimeout(() => { v.classList.add('out'); this._vsTimer = setTimeout(() => v.classList.add('hidden'), 600); }, 2500);
+    clearTimeout(this._vsTimer); clearTimeout(this._vsGuard);
+    const vids = [...v.querySelectorAll('video.clip')];
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(this._vsTimer); clearTimeout(this._vsGuard);
+      v.removeEventListener('pointerdown', finish);
+      this._vsSkip = null;
+      v.classList.add('out');
+      setTimeout(() => v.classList.add('hidden'), 600);
+      done?.();
+    };
+    // No clips (reduced motion, or none available): the short intro, and the battle starts straight away.
+    if (!vids.length) { this._vsTimer = setTimeout(() => { v.classList.add('out'); setTimeout(() => v.classList.add('hidden'), 600); }, 2500); done?.(); return; }
+    this._vsSkip = finish;
+    v.addEventListener('pointerdown', finish);
+    // Play each captain's clip once from the start; close after the longer one ends.
+    let left = vids.length;
+    const oneDone = () => { if (--left <= 0) setTimeout(finish, 350); };
+    for (const vid of vids) {
+      vid.loop = false;
+      try { vid.currentTime = 0; } catch (_) { /* not loaded yet: it starts at 0 anyway */ }
+      vid.play?.().catch(() => {});
+      vid.addEventListener('ended', oneDone, { once: true });
+      vid.addEventListener('error', oneDone, { once: true });
+    }
+    // Safety nets: fall back to the short intro if the clips can't start, and never exceed 11 s.
+    this._vsGuard = setTimeout(() => { if (vids.every((x) => x.paused || x.readyState < 2)) finish(); }, 2500);
+    this._vsTimer = setTimeout(finish, 11000);
   }
 
   beginPlayerTurn() {
@@ -601,6 +632,7 @@ export class Game {
     const k = e.key;
     this.keys[k.toLowerCase()] = down;
     if (!down) return;
+    if (this._vsSkip) { e.preventDefault(); this._vsSkip(); return; }   // any key skips the versus intro
     this.audio.start();
     if (k === 'Tab') { e.preventDefault(); this.toggleView(); return; }
     if (k === 'F1') { e.preventDefault(); $('#help').classList.remove('hidden'); return; }

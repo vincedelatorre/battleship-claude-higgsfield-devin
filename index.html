@@ -178,6 +178,8 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 @keyframes kenburns { from { transform: scale(1.02); } to { transform: scale(1.1) translate(-1%, 1%); } }
 #versus { position: fixed; inset: 0; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; pointer-events: none; background: linear-gradient(90deg, rgba(4,8,10,0.85), rgba(4,8,10,0.45) 50%, rgba(4,8,10,0.85)); transition: opacity 0.6s; }
 #versus.out { opacity: 0; }
+#versus:not(.hidden):not(.out) { pointer-events: auto; cursor: pointer; }
+#versus .vs-skip { position: absolute; left: 0; right: 0; bottom: 28px; text-align: center; font-size: 13px; letter-spacing: 0.08em; color: rgba(236,228,210,0.45); }
 .vs-side { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .vs-portrait { position: relative; width: min(30vw, 46vh); aspect-ratio: 3 / 4; overflow: hidden; border: 1px solid var(--cap); box-shadow: 0 0 0 1px rgba(0,0,0,0.6), 0 30px 80px rgba(0,0,0,0.7); background: #0b1216; }
 .vs-portrait .portrait { position: absolute; inset: 0; aspect-ratio: auto; border: 0; }
@@ -299,6 +301,7 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
   <div class="vs-side me"><div class="vs-portrait" id="vs-me-img"></div><div class="vs-name"><h2 id="vs-me-name"></h2><p id="vs-me-g"></p></div></div>
   <div class="vs-mid">versus</div>
   <div class="vs-side foe"><div class="vs-portrait" id="vs-foe-img"></div><div class="vs-name"><h2 id="vs-foe-name"></h2><p id="vs-foe-g"></p></div></div>
+  <div class="vs-skip">Click or press any key to skip</div>
 </div>
 
 <div class="modal hidden" id="over" role="dialog" aria-modal="true" aria-labelledby="over-t">
