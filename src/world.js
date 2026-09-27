@@ -1106,7 +1106,19 @@ export class World {
       U.uShipInv.value[i].copy(s.root.matrixWorld).invert();
       U.uShipDim.value[i].set(s.Ls / 2, s.beam / 2, 1);
     }
-    U.uFoamScale.value = this.mode === 'chart' && !this.trans ? 0.6 : 1;
+    U.uFoamScale.value = 1;
+    // Board view: blend the physically based water in as the camera rises toward the chart.
+    const board = THREE.MathUtils.smoothstep(this.camera.position.y, 250, 800);
+    U.uBoard.value = board;
+    let k = 0;
+    if (board > 0) for (const f of this.fleets) for (const s of f) {
+      if (k >= 10 || !s.group.visible || (s.sinking && s.motion.sink > 0.6)) continue;
+      const yaw = s.group.rotation.y;
+      U.uWake.value[k].set(s.group.position.x, s.group.position.z, Math.cos(yaw), Math.sin(yaw));
+      U.uWakeDim.value[k].set(s.Ls * 0.5, s.beam * 0.5);
+      k++;
+    }
+    for (; k < 10; k++) U.uWakeDim.value[k].set(0, 0);
   }
 
   _updateLights(dt) {

@@ -237,6 +237,9 @@ uniform vec4 uLights[4];      // xyz position, w intensity
 uniform vec3 uLightCols[4];
 uniform vec3 uFogColor;
 uniform float uFogDensity;
+uniform float uBoard;          // 0 on deck, 1 in the overhead game-board view
+uniform vec4 uWake[10];        // ship centre xz, cos/sin of heading
+uniform vec2 uWakeDim[10];     // half length, half beam (0 = unused)
 varying vec3 vWorld;
 varying float vDist;
 ${SKY_GLSL}
@@ -252,8 +255,11 @@ void main() {
   }
   vec2 xz = vWorld.xz;
   vec4 a0 = texture(der0, xz / Ls.x), a1 = texture(der1, xz / Ls.y), a2 = texture(der2, xz / Ls.z);
-  float f1 = 1.0 - smoothstep(600.0, 1400.0, vDist);
-  float f2 = uDetail * (1.0 - smoothstep(150.0, 500.0, vDist));
+  // The board view looks down from ~1 km but frames a 160 m square: shade it at the detail of a
+  // close view so the fine waves and their whitecaps survive.
+  float dEff = mix(vDist, 140.0, uBoard);
+  float f1 = 1.0 - smoothstep(600.0, 1400.0, dEff);
+  float f2 = max(uDetail, uBoard) * (1.0 - smoothstep(150.0, 500.0, dEff));
   vec2 slope = a0.xy + a1.xy * f1 + a2.xy * f2;
   slope *= mix(1.0, 0.4, uCalm);
   vec3 n = normalize(vec3(-slope.x, 1.0, -slope.y));
@@ -262,7 +268,7 @@ void main() {
   float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
   vec3 R = reflect(-V, n);
   R.y = abs(R.y);
-  vec3 refl = stormSky(R, false);
+  vec3 refl = stormSky(R, false) * mix(1.0, 0.55, uBoard);   // looking down, the sea shows its depths more than the sky
 
   // Body colour: deep slate water with teal subsurface light in the thin wave crests.
   float h = vWorld.y;
@@ -278,6 +284,7 @@ void main() {
   vec2 toP = normalize(vWorld.xz - cameraPosition.xz + vec2(1e-3));
   float side = dot(toP, normalize(uSunDir.xz));
   float sunlit = smoothstep(0.3, 0.85, fbm(vWorld.xz / 300.0 + vec2(uTime * 0.006, 0.0)) + side * 0.3 + 0.04);
+  sunlit = mix(sunlit, 0.42, uBoard);   // no drifting light pools on the board (they read as clouds from above)
   vec3 Hs = normalize(uSunDir + V);
   float nh = max(dot(n, Hs), 0.0);
   float crest = smoothstep(-0.2 * uHs, 0.6 * uHs, h);
@@ -286,14 +293,63 @@ void main() {
   col += sunColor() * (0.018 + 0.05 * crest) * sunlit * max(dot(n, uSunDir) + 0.3, 0.0);     // sun-facing wave faces catch the light
   col *= mix(0.88, 1.0, sunlit);
 
+  // Board view water body, physically based:
+  //  - Beer-Lambert absorption per channel (red is absorbed within metres, blue travels furthest),
+  //  - broadband backscatter from the water column giving the deep colour,
+  //  - subsurface scattering through thin, sunlit crests (their colour set by the same absorption),
+  //  - refraction: the view ray bends into the water and meets sunlight dappling a few metres down.
+  if (uBoard > 0.001) {
+    vec3 absorb = vec3(0.45, 0.064, 0.03);                  // per metre
+    vec3 bback = vec3(0.0021, 0.0046, 0.0042);              // broadband backscatter
+    vec3 albedo = bback / (absorb + bback);
+    vec3 E = sunColor() * (0.35 + 0.65 * max(uSunDir.y, 0.0)) * 0.55 + vec3(0.2, 0.25, 0.3) * (1.0 + uFlash * 2.0);
+    vec3 body = E * albedo * (1.0 - F) * 0.95;
+    // Local crest height: total height minus the long swell, so small waves crest on their own.
+    float hLocal = h - texture(disp0, xz / Ls.x).y;
+    float crestL = smoothstep(0.0, 0.32 * uHs, hLocal);
+    float back = 0.45 + 0.55 * max(dot(normalize(n.xz + vec2(1e-4)), -normalize(uSunDir.xz)), 0.0);
+    vec3 through = exp(-absorb * mix(3.2, 0.9, crestL));   // light path through the crest
+    body += sunColor() * through * crestL * back * 0.075;
+    vec3 Vr = refract(-V, n, 0.75);
+    vec2 uw = xz + Vr.xz / max(-Vr.y, 0.25) * 5.0;           // 5 m down along the refracted ray
+    float caus = pow(abs(sin(uw.x * 0.85 + sin(uw.y * 0.63 + uTime * 0.9) * 1.4) * sin(uw.y * 0.77 + sin(uw.x * 0.58 - uTime * 0.8) * 1.3)), 4.0);
+    body += sunColor() * exp(-absorb * 5.0) * caus * 0.035;
+    vec3 boardCol = mix(body, refl, F);
+    boardCol += sunColor() * pow(nh, 900.0) * 1.6;                                 // sun glints on the facets
+    col = mix(col, boardCol, uBoard);
+  }
+
   // Foam: from wave folding in each cascade, broken up with noise so it streaks and tears.
-  float foam = texture(disp0, xz / Ls.x).w * 0.8 + texture(disp1, xz / Ls.y).w * f1 * (0.15 + 0.85 * uDetail) + texture(disp2, xz / Ls.z).w * f2 * 0.6;
+  // (On the board the long swell's foam is too coarse to read as whitecaps: it would smear like fog.)
+  float foam = texture(disp0, xz / Ls.x).w * mix(0.8, 0.08, uBoard) + texture(disp1, xz / Ls.y).w * f1 * (0.15 + 0.85 * max(uDetail, uBoard)) + texture(disp2, xz / Ls.z).w * f2 * 0.6;
   float breakup = fbm(xz * 0.35 + vec2(uTime * 0.05, 0.0)) * 0.6 + fbm(xz * 1.7) * 0.4;
   foam *= uFoamScale;
   foam += smoothstep(0.55 * uHs, 0.95 * uHs, h) * 0.35 * uFoamScale * uDetail;
+  // Whitecaps on the board: small waves breaking at their own crests.
+  // Waves break in groups: a slowly drifting breaking-zone field gathers the whitecaps into patches,
+  // and faint streaks trail downwind from them.
+  vec2 W = vec2(0.92, 0.38), Wp = vec2(-W.y, W.x);
+  float zone = smoothstep(0.35, 0.75, fbm(xz / 45.0 + W * uTime * 0.02));
+  float streak = smoothstep(0.55, 0.8, fbm(vec2(dot(xz, W) * 0.05 - uTime * 0.05, dot(xz, Wp) * 0.7)));
+  foam *= mix(1.0, 0.35 + 0.9 * zone, uBoard);
+  foam += smoothstep(0.24 * uHs, 0.44 * uHs, h - texture(disp0, xz / Ls.x).y) * 0.6 * zone * uBoard;
+  foam += streak * (0.15 + 0.35 * zone) * 0.35 * uBoard;
+  // White water around every hull: a broken collar at the waterline where the sea slaps the sides.
+  float collar = 0.0;
+  for (int i = 0; i < 10; i++) {
+    if (uWakeDim[i].x < 0.5) continue;
+    vec2 d = xz - uWake[i].xy;
+    vec2 l = vec2(d.x * uWake[i].z - d.y * uWake[i].w, d.x * uWake[i].w + d.y * uWake[i].z);
+    float e = length(l / uWakeDim[i]);
+    collar = max(collar, smoothstep(1.55, 1.02, e) * smoothstep(0.92, 1.0, e));
+  }
+  foam += collar * (0.55 + 0.45 * sin(uTime * 2.3 + xz.x * 0.4 + xz.y * 0.3)) * uBoard;
   foam = clamp(foam, 0.0, 1.0) * smoothstep(0.3, 0.8, breakup + foam * 0.45);
   vec3 foamCol = vec3(0.6, 0.66, 0.72) * (amb * 4.0 + 0.1) + sunColor() * 0.16 * sunlit;
-  col = mix(col, foamCol, foam * 0.85);
+  // Board foam: brighter aerated white with a cool shadow side, lit by the low sun.
+  vec3 foamBoard = vec3(0.78, 0.84, 0.88) * (0.32 + 0.25 * max(dot(n, uSunDir), 0.0)) + sunColor() * 0.12;
+  foamCol = mix(foamCol, foamBoard, uBoard);
+  col = mix(col, foamCol, foam * mix(0.85, 0.92, uBoard));
 
   // Fires, lanterns and muzzle flashes reflected on the sea.
   for (int i = 0; i < 4; i++) {
@@ -477,6 +533,9 @@ export class Ocean {
       der0: { value: null }, der1: { value: null }, der2: { value: null },
       Ls: { value: new THREE.Vector3(CASCADES[0].L, CASCADES[1].L, CASCADES[2].L) },
       uDetail: { value: 1 }, uCalm: { value: 0 }, uHs: { value: this.hs }, uFoamScale: { value: 1 },
+      uBoard: { value: 0 },
+      uWake: { value: Array.from({ length: 10 }, () => new THREE.Vector4()) },
+      uWakeDim: { value: Array.from({ length: 10 }, () => new THREE.Vector2()) },
       uShipInv: { value: [0, 1, 2, 3, 4, 5].map(() => new THREE.Matrix4()) }, uShipDim: { value: [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()) },
       uTime: { value: 0 }, uFlash: { value: 0 }, uFlashDir: { value: new THREE.Vector3(0, 0.5, -1).normalize() },
       uSunDir: { value: new THREE.Vector3(-0.78, 0.13, -0.62).normalize() },
