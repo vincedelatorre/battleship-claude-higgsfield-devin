@@ -52,6 +52,8 @@ Music in battle (the music fades to it after the versus intro), Sound effects, S
 
 ## Art
 
+- The Set Sail flag's lettering uses **Pirata One** by Rodrigo Fuenzalida and Nicolas Massi, embedded under the SIL Open Font License 1.1 (licence in `public/assets/fonts/OFL-PirataOne.txt`).
+
 All art was generated with Higgsfield and ships with the project in `public/assets/`:
 captain portraits (`portraits/`), each captain's 8-second performance clip (`video/`, looping,
 first and last frame match the portrait), the title key art (`ui/title.jpg`) and the four painted
