@@ -16,7 +16,9 @@ export class Music {
     const el = (this.el = new Audio());
     el.src = src; el.loop = true; el.preload = 'auto';
     this.ctx = ctx;
-    if (ctx) {
+    // Opened straight from disk (file://), browsers silence audio routed through WebAudio: there the
+    // element plays directly and its own volume carries the mix (fades, ducking and mute still work).
+    if (ctx && location.protocol !== 'file:') {
       try {
         this.gain = ctx.createGain(); this.gain.gain.value = 0;
         ctx.createMediaElementSource(el).connect(this.gain).connect(ctx.destination);
