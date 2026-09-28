@@ -1,11 +1,12 @@
+import { Music } from './music.js';
 // audio.js - every sound is synthesized with WebAudio (no audio files), each on first use:
 // cannons, whistles, splashes, explosions, bells, thunder, creaks, and looping rain/wind/sea.
 export class Audio {
-  constructor() { this.ctx = null; this.muted = false; this.buffers = {}; this.loops = {}; }
+  constructor() { this.ctx = null; this.muted = false; this.buffers = {}; this.loops = {}; this.music = new Music(); }
 
   // Browsers only allow audio after a user gesture, so this runs on the first click or key.
   start() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); this.music.start(this.ctx); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
@@ -14,6 +15,7 @@ export class Audio {
     const comp = this.ctx.createDynamicsCompressor();
     this.master.connect(comp).connect(this.ctx.destination);
     this._synthAll();
+    this.music.start(this.ctx);
     // Build the ambience loops just after the gesture that started audio, so that press stays instant.
     setTimeout(() => this._startLoops(), 30);
   }
@@ -26,10 +28,11 @@ export class Audio {
       this.loops[k] = g;
     }
   }
-  setMuted(m) { this.muted = m; if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05); }
+  setMuted(m) { this.muted = m; this.music.setMuted(m); if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05); }
   loop(name, vol) { const g = this.loops[name]; if (g) g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.4); }
 
   play(name, { vol = 1, rate = 1, pan = 0, delay = 0, vary = 0 } = {}) {
+    if (name === 'cannon' || name === 'explosion' || name === 'bigExplosion') this.music.duckFor(name === 'bigExplosion' ? 2.2 : 1.1, name === 'cannon' ? 0.55 : 0.4);
     if (!this.ctx || !this.buffers[name]) return;
     const src = this.ctx.createBufferSource();
     src.buffer = this._get(name);

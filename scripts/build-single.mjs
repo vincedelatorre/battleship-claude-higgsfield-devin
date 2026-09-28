@@ -29,7 +29,7 @@ for (const d of ['crew', 'ship', 'voice']) {
 let html = fs.readFileSync('index.html', 'utf8');
 const tag = '<script type="module" src="/src/main.js"></script>';
 if (!html.includes(tag)) throw new Error('entry script tag not found in index.html');
-html = html.replace(tag, () => `<script>window.CG_ASSETS=${JSON.stringify(assets)};window.CG_NO_FILES=true;window.CG_VIDEO_B64=${JSON.stringify(videos)};window.CG_BIN_B64=${JSON.stringify(bins)};</script>\n<script type="module">${js}</script>`);
+html = html.replace(tag, () => `<script>window.CG_MUSIC_URL=${JSON.stringify(process.env.CG_MUSIC_URL || null)};window.CG_ASSETS=${JSON.stringify(assets)};window.CG_NO_FILES=true;window.CG_VIDEO_B64=${JSON.stringify(videos)};window.CG_BIN_B64=${JSON.stringify(bins)};</script>\n<script type="module">${js}</script>`);
 fs.mkdirSync('dist-single', { recursive: true });
 fs.writeFileSync(out, html);
 console.log(`${out}: ${(html.length / 1e6).toFixed(2)} MB, ${Object.keys(assets).length} art files and ${Object.keys(videos).length} portrait clips and ${Object.keys(bins).length} crew/ship/voice files embedded`);

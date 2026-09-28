@@ -801,6 +801,7 @@ export class Game {
     // Ambience depends on where you stand.
     if (this.audio.ctx) {
       const deck = w.mode === 'deck';
+      this.audio.music.tick(dt);
       this.audio.loop('rain', deck ? 0.32 : 0.16);
       this.audio.loop('wind', deck ? 0.3 : 0.2);
       this.audio.loop('sea', deck ? 0.4 : 0.22);
