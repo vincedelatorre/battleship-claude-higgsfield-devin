@@ -180,7 +180,7 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 #audio-panel .audio-box { max-width: 460px; }
 #audio-panel h2 { font-size: 32px; margin: 0 0 16px; }
 .audio-rows { display: grid; gap: 10px; margin-bottom: 16px; }
-.audio-rows label { display: grid; grid-template-columns: 120px 1fr 44px; align-items: center; gap: 12px; }
+.audio-rows label { display: grid; grid-template-columns: 140px 1fr 44px; align-items: center; gap: 12px; }
 .audio-rows input[type=range] { width: 100%; accent-color: var(--brass); }
 .audio-rows output { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
 .audio-check { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
@@ -254,6 +254,7 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
     <div class="audio-rows">
       <label>Master<input type="range" min="0" max="1" step="0.01" data-mix="master"><output></output></label>
       <label>Music<input type="range" min="0" max="1" step="0.01" data-mix="music"><output></output></label>
+      <label>Music in battle<input type="range" min="0" max="1" step="0.01" data-mix="musicBattle"><output></output></label>
       <label>Sound effects<input type="range" min="0" max="1" step="0.01" data-mix="effects"><output></output></label>
       <label>Sea<input type="range" min="0" max="1" step="0.01" data-mix="sea"><output></output></label>
       <label>Rain<input type="range" min="0" max="1" step="0.01" data-mix="rain"><output></output></label>

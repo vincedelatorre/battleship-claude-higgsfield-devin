@@ -34,10 +34,10 @@ audio on `file://` pages.
 
 ## Audio settings
 
-The speaker button (bottom-left, every screen) opens the Audio panel: volume sliders for Master, Music,
-Sound effects, Sea, Rain and Wind, a switch to lower the music under cannon fire, and Mute all (also the
+The speaker button (bottom-left, every screen) opens the Audio panel: volume sliders for Master, Music (menus),
+Music in battle (the music fades to it after the versus intro), Sound effects, Sea, Rain and Wind, a switch to lower the music under cannon fire, and Mute all (also the
 **M** key). Settings are saved in the browser. Defaults keep the music forward and the ambience low
-(master 80%, music 55%, effects 80%, sea 3%, rain 4%, wind 23%); tune the defaults in `AUDIO_DEFAULTS` in `src/audio.js`.
+(master 80%, music 55%, music in battle 35%, effects 80%, sea 3%, rain 4%, wind 23%); tune the defaults in `AUDIO_DEFAULTS` in `src/audio.js`.
 
 ## Performance notes
 

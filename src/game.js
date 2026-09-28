@@ -112,6 +112,7 @@ export class Game {
 
   _showScreen(s) {
     this.screen = s;
+    if (s !== 'battle') this.audio.music.setBattle(false);
     this._syncKeyArt();
     for (const id of ['title', 'placement', 'battle', 'deck']) $('#' + id).classList.add('hidden');
     if (s === 'title') { $('#title').classList.remove('hidden'); ui.renderCards(this.sel, this.mode); }
@@ -232,6 +233,7 @@ export class Game {
     this.addLog(first === 0 ? 'The battle begins. You have the first shot.' : 'The battle begins. The enemy fires first.');
     // The battle opens once the versus intro has finished (both captains' clips played through).
     this._versus(m, () => {
+      this.audio.music.setBattle(true);
       ui.banner('Battle stations', first === 0 ? 'You have the first shot' : 'The enemy fires first', false, 1800);
       this.audio.play('bell', { vol: 0.5 });
       if (first === 0) { this.queue(0.2, () => this.pan(1, 1.2)); this.queue(1.3, () => {}, () => this.beginPlayerTurn()); }
@@ -603,6 +605,7 @@ export class Game {
     const m = this.match, won = m.winner === 0, w = this.world;
     this.aim = null;
     this.screen = 'over';
+    this.audio.music.setBattle(false);
     // Reveal the enemy fleet that survived.
     m.side[1].waters.ships.forEach((s, i) => { const sm = w.fleets[1][i]; if (!sm.revealed) { sm.revealed = true; sm.wreckPos = { ...s.pos }; } });
     this.audio.play(won ? 'victory' : 'defeat', { vol: 0.8 });
@@ -832,7 +835,7 @@ export class Game {
     // Ambience depends on where you stand.
     if (this.audio.ctx) {
       const deck = w.mode === 'deck';
-      this.audio.music.tick(dt);
+      this.audio.music.tick();
       this.audio.loop('rain', deck ? 0.32 : 0.16);
       this.audio.loop('wind', deck ? 0.3 : 0.2);
       this.audio.loop('sea', deck ? 0.4 : 0.22);

@@ -26,15 +26,24 @@ export class Music {
     el.play().catch(() => {});
   }
   setMuted(m) { this.muted = m; }
+  setBattle(on) { if (this.inBattle !== on) { this.inBattle = on; this._sceneChange = true; } }
   // Dip under loud effects so the hits land, then swell back.
   duckFor(sec, depth = 0.45) { if (this.duckOn && !this.duckOn()) return; this.duckUntil = performance.now() + sec * 1000; this.duckDepth = Math.min(this.duckDepth, depth); }
-  tick(dt) {
+  tick() {
     if (!this.el) return;
+    // Real elapsed time, so fades take the same seconds at any frame rate.
+    const now = performance.now(), dt = Math.min(0.25, (now - (this._t || now)) / 1000);
+    this._t = now;
     this.fade = Math.min(1, this.fade + dt / 3);
     const ducking = performance.now() < this.duckUntil;
     if (!ducking) this.duckDepth = 1;
     this.duck += ((ducking ? this.duckDepth : 1) - this.duck) * Math.min(1, dt * (ducking ? 10 : 1.2));
-    const level = this.level ? this.level() : (this.muted ? 0 : this.base);
+    const target = this.level ? this.level() : (this.muted ? 0 : this.base);
+    // Glide between levels (menu -> battle fades over ~3 s); mute and slider moves follow quickly.
+    const rate = this._lastTarget !== undefined && Math.abs(target - this._lastTarget) > 0.001 && !this._sceneChange ? 8 : 1.1;
+    this._lastTarget = target; this._sceneChange = false;
+    this.levelNow = this.levelNow === undefined ? target : this.levelNow + (target - this.levelNow) * Math.min(1, dt * rate);
+    const level = this.levelNow;
     const v = level * this.fade * this.duck;
     if (this.gain) { if (Math.abs(this.gain.gain.value - v) > 0.002) this.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.03); }
     else if (Math.abs(this.el.volume - v) > 0.003) this.el.volume = Math.max(0, Math.min(1, v));

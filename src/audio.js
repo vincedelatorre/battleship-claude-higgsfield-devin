@@ -1,7 +1,7 @@
 import { Music } from './music.js';
 
 // Player-adjustable mix, saved between sessions. Sea and rain sit well under the music.
-export const AUDIO_DEFAULTS = { master: 0.8, music: 0.55, effects: 0.8, sea: 0.03, rain: 0.04, wind: 0.23, duck: true, muted: false };
+export const AUDIO_DEFAULTS = { master: 0.8, music: 0.55, musicBattle: 0.35, effects: 0.8, sea: 0.03, rain: 0.04, wind: 0.23, duck: true, muted: false };
 const KEY = 'captains-gambit-audio';
 function loadSettings() {
   try { return { ...AUDIO_DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { return { ...AUDIO_DEFAULTS }; }
@@ -13,7 +13,8 @@ export class Audio {
     this.ctx = null; this.buffers = {}; this.loops = {}; this.music = new Music();
     this.settings = loadSettings();
     this.muted = this.settings.muted;
-    this.music.level = () => (this.settings.muted ? 0 : this.settings.music * this.settings.master);
+    // Menus use the Music level; once the versus intro ends, the battle uses Music in battle.
+    this.music.level = () => (this.settings.muted ? 0 : (this.music.inBattle ? this.settings.musicBattle : this.settings.music) * this.settings.master);
     this.music.duckOn = () => this.settings.duck;
   }
   // Change one mix setting (0-1 volumes, or the duck / muted switches); applied at once and saved.
