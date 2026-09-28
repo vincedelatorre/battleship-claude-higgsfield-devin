@@ -17,6 +17,32 @@ Or build one self-contained file you can double-click or host anywhere:
 npm run build:single   # -> dist-single/captains-gambit.html
 ```
 
+## Share it: play online with GitHub Pages
+
+Anyone can play in their browser, nothing to install, music included:
+
+1. Push this repo to GitHub.
+2. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions** (one time).
+3. The workflow in `.github/workflows/pages.yml` tests the game, builds `site/` and publishes it.
+   Every later push to `main` republishes automatically (watch progress in the **Actions** tab).
+4. Share the link: `https://<your-username>.github.io/<repo-name>/`
+
+`npm run build:site` builds the same site locally: `site/index.html` (the whole game in one file) and
+`site/music/pirate-music.mp4` (streamed beside it). Upload that folder to any static host to share it
+elsewhere. Open it from a web address, not by double-clicking the file: browsers mute page-processed
+audio on `file://` pages.
+
+## Performance notes
+
+- Crew: nothing runs while they're hidden (map views); feet are planted on a small set of contact
+  vertices found once per character by posing it through every animation.
+- Ocean: GPU FFT every frame; the CPU copy (ship motion only) every third frame.
+- Map view: no sky or shadow rendering; distant galleons don't cast shadows; shadows switch by
+  intensity, never by light setup, so no shader recompiles.
+- Menu: no backdrop blur or animated key art; only the selected captain's clip plays; the covered
+  3D world isn't drawn.
+- Music streams through an `<audio>` element (never decoded whole into memory).
+
 ## Art
 
 All art was generated with Higgsfield and ships with the project in `public/assets/`:

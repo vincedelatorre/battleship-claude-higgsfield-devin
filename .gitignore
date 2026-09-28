@@ -4,3 +4,4 @@ dist-single/
 devtests/
 *.log
 .DS_Store
+site/

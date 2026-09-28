@@ -8,7 +8,8 @@
     "build:single": "node scripts/build-single.mjs",
     "preview": "vite preview",
     "test": "node tests/rules.test.js",
-    "balance": "node tests/rules.test.js --balance 200"
+    "balance": "node tests/rules.test.js --balance 200",
+    "build:site": "node scripts/build-site.mjs"
   },
   "keywords": [],
   "author": "",
