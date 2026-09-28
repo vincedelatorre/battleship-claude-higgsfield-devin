@@ -72,6 +72,35 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- screens
+  // Audio settings: sliders for master, music, effects, sea, rain, wind; duck and mute switches.
+  _setupAudioPanel() {
+    const panel = $('#audio-panel'), btn = $('#audio-btn');
+    const sync = () => {
+      const s = this.audio.settings;
+      panel.querySelectorAll('[data-mix]').forEach((el) => {
+        const k = el.dataset.mix;
+        if (el.type === 'checkbox') el.checked = !!s[k];
+        else { el.value = s[k]; el.nextElementSibling.textContent = `${Math.round(s[k] * 100)}%`; }
+      });
+      btn.classList.toggle('muted', !!s.muted);
+    };
+    this._syncAudioUi = sync;
+    const open = (on) => { panel.classList.toggle('hidden', !on); this.audioOpen = on; if (on) { sync(); panel.querySelector('input')?.focus(); } };
+    this._openAudio = open;
+    btn.addEventListener('click', () => { this.audio.start(); open(panel.classList.contains('hidden')); });
+    panel.addEventListener('input', (e) => {
+      const k = e.target.dataset?.mix;
+      if (!k) return;
+      this.audio.start();
+      this.audio.set(k, e.target.type === 'checkbox' ? e.target.checked : Number(e.target.value));
+      sync();
+    });
+    $('#audio-reset').addEventListener('click', () => { this.audio.reset(); sync(); });
+    $('#audio-close').addEventListener('click', () => open(false));
+    panel.addEventListener('pointerdown', (e) => { if (e.target === panel) open(false); });   // click outside the box closes
+    sync();
+  }
+
   _syncKeyArt() {
     const on = !!this.keyArt && this.screen === 'title';
     const el = $('#keyart');
@@ -93,6 +122,7 @@ export class Game {
   }
 
   _bindUI() {
+    this._setupAudioPanel();
     // Captain cards respond on press (not release) and only move the highlight: instant feedback.
     document.body.addEventListener('pointerdown', (e) => {
       const cap = e.target.closest('[data-cap]')?.dataset.cap;
@@ -632,6 +662,7 @@ export class Game {
     const k = e.key;
     this.keys[k.toLowerCase()] = down;
     if (!down) return;
+    if (this.audioOpen) { this.keys[k.toLowerCase()] = false; if (k === 'Escape') { e.preventDefault(); this._openAudio(false); } return; }
     if (this._vsSkip) { e.preventDefault(); this._vsSkip(); return; }   // any key skips the versus intro
     this.audio.start();
     if (k === 'Tab') { e.preventDefault(); this.toggleView(); return; }
@@ -645,7 +676,7 @@ export class Game {
       return;
     }
     const lk = k.toLowerCase();
-    if (lk === 'm') { this.audio.setMuted(!this.audio.muted); ui.toast(this.audio.muted ? 'Sound off' : 'Sound on'); }
+    if (lk === 'm') { this.audio.setMuted(!this.audio.muted); this._syncAudioUi?.(); ui.toast(this.audio.muted ? 'Sound off' : 'Sound on'); }
     if (lk === 'k') { this.world.comfort = !this.world.comfort; ui.toast(this.world.comfort ? 'Comfort mode on: less shake, steady horizon' : 'Comfort mode off'); }
     if (lk === 'f') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
     if (this.screen === 'title') {
@@ -678,7 +709,7 @@ export class Game {
   }
   onMouseDown(e) {
     this.audio.start();
-    if (e.target.closest && e.target.closest('.panel, .btn, button')) {
+    if (e.target.closest && e.target.closest('.panel, .btn, button, #audio-panel')) {
       if (e.target.id === 'seacanvas' && e.button === 0) this._seaChartClick(e);
       else if (e.target.id === 'seacanvas' && e.button === 2) this.cancelAim();
       return;

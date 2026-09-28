@@ -32,6 +32,13 @@ Anyone can play in their browser, nothing to install, music included:
 elsewhere. Open it from a web address, not by double-clicking the file: browsers mute page-processed
 audio on `file://` pages.
 
+## Audio settings
+
+The speaker button (bottom-left, every screen) opens the Audio panel: volume sliders for Master, Music,
+Sound effects, Sea, Rain and Wind, a switch to lower the music under cannon fire, and Mute all (also the
+**M** key). Settings are saved in the browser. Defaults keep the music forward and the sea and rain low
+(sea 30%, rain 25%); tune the defaults in `AUDIO_DEFAULTS` in `src/audio.js`.
+
 ## Performance notes
 
 - Crew: nothing runs while they're hidden (map views); feet are planted on a small set of contact

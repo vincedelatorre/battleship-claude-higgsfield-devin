@@ -27,14 +27,15 @@ export class Music {
   }
   setMuted(m) { this.muted = m; }
   // Dip under loud effects so the hits land, then swell back.
-  duckFor(sec, depth = 0.45) { this.duckUntil = performance.now() + sec * 1000; this.duckDepth = Math.min(this.duckDepth, depth); }
+  duckFor(sec, depth = 0.45) { if (this.duckOn && !this.duckOn()) return; this.duckUntil = performance.now() + sec * 1000; this.duckDepth = Math.min(this.duckDepth, depth); }
   tick(dt) {
     if (!this.el) return;
     this.fade = Math.min(1, this.fade + dt / 3);
     const ducking = performance.now() < this.duckUntil;
     if (!ducking) this.duckDepth = 1;
     this.duck += ((ducking ? this.duckDepth : 1) - this.duck) * Math.min(1, dt * (ducking ? 10 : 1.2));
-    const v = this.muted ? 0 : this.base * this.fade * this.duck;
+    const level = this.level ? this.level() : (this.muted ? 0 : this.base);
+    const v = level * this.fade * this.duck;
     if (this.gain) { if (Math.abs(this.gain.gain.value - v) > 0.002) this.gain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.03); }
     else if (Math.abs(this.el.volume - v) > 0.003) this.el.volume = Math.max(0, Math.min(1, v));
   }

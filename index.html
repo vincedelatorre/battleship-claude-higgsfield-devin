@@ -170,6 +170,24 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 #loading.done { opacity: 0; pointer-events: none; }
 #nogl { position: fixed; inset: 0; display: grid; place-items: center; text-align: center; padding: 40px; }
 
+/* audio settings */
+#audio-btn { position: fixed; left: 12px; bottom: 12px; z-index: 60; width: 38px; height: 38px; display: grid; place-items: center; color: var(--ink, #ece4d2); background: rgba(10,18,23,0.88); border: 1px solid var(--brass-dim); border-radius: 50%; cursor: pointer; }
+#audio-btn:hover { border-color: var(--brass); }
+#audio-btn #audio-x { display: none; }
+#audio-btn.muted #audio-x { display: inline; }
+#audio-btn.muted #audio-waves { display: none; }
+#audio-panel { z-index: 70; }
+#audio-panel .audio-box { max-width: 460px; }
+#audio-panel h2 { font-size: 32px; margin: 0 0 16px; }
+.audio-rows { display: grid; gap: 10px; margin-bottom: 16px; }
+.audio-rows label { display: grid; grid-template-columns: 120px 1fr 44px; align-items: center; gap: 12px; }
+.audio-rows input[type=range] { width: 100%; accent-color: var(--brass); }
+.audio-rows output { text-align: right; font-variant-numeric: tabular-nums; opacity: 0.8; }
+.audio-check { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.audio-check input { accent-color: var(--brass); width: 16px; height: 16px; }
+.audio-check .hint { opacity: 0.55; }
+#audio-panel .buttons { margin-top: 18px; }
+
 /* key art title, versus intro, winner portrait */
 #keyart { position: fixed; inset: 0; background: #04080a center 35% / cover no-repeat; opacity: 0; transition: opacity 1.4s; pointer-events: none; }
 /* Static key art: the continuous zoom forced a full-screen repaint every frame. */
@@ -227,6 +245,25 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 <canvas id="gl" aria-label="Battle view"></canvas>
 <div id="keyart" aria-hidden="true"></div>
 <canvas id="overlay" aria-hidden="true"></canvas>
+<button id="audio-btn" type="button" aria-label="Audio settings" title="Audio settings (M mutes)">
+  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/><path id="audio-waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path id="audio-x" d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+</button>
+<div class="modal hidden" id="audio-panel" role="dialog" aria-modal="true" aria-labelledby="audio-t">
+  <div class="panel audio-box">
+    <h2 id="audio-t">Audio</h2>
+    <div class="audio-rows">
+      <label>Master<input type="range" min="0" max="1" step="0.01" data-mix="master"><output></output></label>
+      <label>Music<input type="range" min="0" max="1" step="0.01" data-mix="music"><output></output></label>
+      <label>Sound effects<input type="range" min="0" max="1" step="0.01" data-mix="effects"><output></output></label>
+      <label>Sea<input type="range" min="0" max="1" step="0.01" data-mix="sea"><output></output></label>
+      <label>Rain<input type="range" min="0" max="1" step="0.01" data-mix="rain"><output></output></label>
+      <label>Wind<input type="range" min="0" max="1" step="0.01" data-mix="wind"><output></output></label>
+    </div>
+    <label class="audio-check"><input type="checkbox" data-mix="duck"> Lower the music under cannon fire and explosions</label>
+    <label class="audio-check"><input type="checkbox" data-mix="muted"> Mute all sound <span class="hint">(M)</span></label>
+    <div class="buttons"><button class="btn" type="button" id="audio-reset">Reset to defaults</button><button class="btn primary" type="button" id="audio-close">Done</button></div>
+  </div>
+</div>
 
 <section id="title" class="layer hidden" aria-label="Choose your captain">
   <h1 class="wordmark"><span>A game of broadsides</span>Captain's Gambit</h1>

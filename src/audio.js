@@ -1,8 +1,35 @@
 import { Music } from './music.js';
+
+// Player-adjustable mix, saved between sessions. Sea and rain sit well under the music.
+export const AUDIO_DEFAULTS = { master: 0.8, music: 0.55, effects: 1, sea: 0.3, rain: 0.25, wind: 1, duck: true, muted: false };
+const KEY = 'captains-gambit-audio';
+function loadSettings() {
+  try { return { ...AUDIO_DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { return { ...AUDIO_DEFAULTS }; }
+}
 // audio.js - every sound is synthesized with WebAudio (no audio files), each on first use:
 // cannons, whistles, splashes, explosions, bells, thunder, creaks, and looping rain/wind/sea.
 export class Audio {
-  constructor() { this.ctx = null; this.muted = false; this.buffers = {}; this.loops = {}; this.music = new Music(); }
+  constructor() {
+    this.ctx = null; this.buffers = {}; this.loops = {}; this.music = new Music();
+    this.settings = loadSettings();
+    this.muted = this.settings.muted;
+    this.music.level = () => (this.settings.muted ? 0 : this.settings.music * this.settings.master);
+    this.music.duckOn = () => this.settings.duck;
+  }
+  // Change one mix setting (0-1 volumes, or the duck / muted switches); applied at once and saved.
+  set(key, value) {
+    this.settings[key] = value;
+    if (key === 'muted') this.muted = value;
+    try { localStorage.setItem(KEY, JSON.stringify(this.settings)); } catch (_) { /* private mode: not saved */ }
+    this._applyMix();
+  }
+  reset() { for (const [k, v] of Object.entries(AUDIO_DEFAULTS)) this.settings[k] = v; this.set('muted', false); }
+  _applyMix() {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime, s = this.settings;
+    this.master.gain.setTargetAtTime(s.muted ? 0 : s.master, t, 0.05);
+    this.fx.gain.setTargetAtTime(s.effects, t, 0.05);
+  }
 
   // Browsers only allow audio after a user gesture, so this runs on the first click or key.
   start() {
@@ -11,7 +38,10 @@ export class Audio {
     if (!AC) return;
     this.ctx = new AC();
     this.master = this.ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.8;
+    this.master.gain.value = this.settings.muted ? 0 : this.settings.master;
+    this.fx = this.ctx.createGain();                 // sound effects channel
+    this.fx.gain.value = this.settings.effects;
+    this.fx.connect(this.master);
     const comp = this.ctx.createDynamicsCompressor();
     this.master.connect(comp).connect(this.ctx.destination);
     this._synthAll();
@@ -28,8 +58,9 @@ export class Audio {
       this.loops[k] = g;
     }
   }
-  setMuted(m) { this.muted = m; this.music.setMuted(m); if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.8, this.ctx.currentTime, 0.05); }
-  loop(name, vol) { const g = this.loops[name]; if (g) g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.4); }
+  setMuted(m) { this.set('muted', m); }
+  // Ambience loops: the game sets the scene level, the player's mix scales it (sea, rain, wind sliders).
+  loop(name, vol) { const g = this.loops[name]; if (g) g.gain.setTargetAtTime(vol * (this.settings[name] ?? 1), this.ctx.currentTime, 0.4); }
 
   play(name, { vol = 1, rate = 1, pan = 0, delay = 0, vary = 0 } = {}) {
     if (name === 'cannon' || name === 'explosion' || name === 'bigExplosion') this.music.duckFor(name === 'bigExplosion' ? 2.2 : 1.1, name === 'cannon' ? 0.55 : 0.4);
@@ -39,7 +70,7 @@ export class Audio {
     src.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * vary);
     const g = this.ctx.createGain(); g.gain.value = vol * (1 + (Math.random() * 2 - 1) * vary * 0.5);
     const p = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
-    if (p) { p.pan.value = pan; src.connect(g).connect(p).connect(this.master); } else src.connect(g).connect(this.master);
+    if (p) { p.pan.value = pan; src.connect(g).connect(p).connect(this.fx); } else src.connect(g).connect(this.fx);
     src.start(this.ctx.currentTime + delay);
   }
 
