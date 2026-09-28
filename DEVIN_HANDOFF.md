@@ -1,5 +1,8 @@
 # Captain's Gambit: review and publish
 
+_Claude wrote this note at the end of the build session and handed it to Devin with the repo.
+Devin's outcome is at the bottom. The note as first handed over (with `REPO-NAME` placeholders) is in commit `2413cbb`._
+
 `captains-gambit/` is the complete Git repository (19 commits, branch `main`, latest commit `83112c9`).
 A pirate Battleship game for the browser: three.js 3D ocean and ships, Higgsfield-generated crew and art,
 background music, and an audio settings panel. No server code; it builds to static files.
@@ -22,12 +25,21 @@ npm run dev                        # play it locally
 - Tab boards your ship (first person): helm, stairs to the main deck, crew on the planks.
 
 ## 3. Push and publish
-1. Push to `https://github.com/vincedelatorre/REPO-NAME` on `main`, keeping all commits (no squash, no force-push over existing commits; rebase onto any README/licence the repo was created with).
+1. Push to `https://github.com/vincedelatorre/battleship-claude-higgsfield-devin` on `main`, keeping all commits (no squash, no force-push over existing commits; rebase onto any README/licence the repo was created with).
 2. Settings -> Pages -> Build and deployment -> Source: **GitHub Actions**.
 3. The "Publish game to GitHub Pages" workflow (`.github/workflows/pages.yml`) tests, builds and deploys `site/`.
-4. When it goes green, confirm `https://vincedelatorre.github.io/REPO-NAME/` loads and the music plays after the first click.
+4. When it goes green, confirm `https://vincedelatorre.github.io/battleship-claude-higgsfield-devin/` loads and the music plays after the first click.
 
 ## Notes
-- The music (`public/assets/music/pirate-music.mp4`, 7.4 MB) must be pushed; no Git LFS needed. The owner should confirm the rights to this track before the repo or Pages site is public.
+- The music (`public/assets/music/pirate-music.mp4`, 7.4 MB) must be pushed; no Git LFS needed. The owner should confirm the rights to this track before the repo or Pages site is public. **The owner confirmed the rights before publishing.**
 - Do not commit `node_modules/`, `dist/`, `dist-single/`, `site/` (already in .gitignore).
 - README.md documents controls, architecture, performance notes, audio settings and sharing.
+
+## Outcome (Devin)
+- **Verified:** latest commit `83112c9`; `npm ci` installs cleanly; `npm test` 356 passed, 0 failed;
+  `npm run build:site` produced `site/index.html` (15.47 MB) and `site/music/pirate-music.mp4` (7.36 MB).
+- **Checked the repo:** all 56 files tracked, every asset the code loads is present, no secrets, largest file 7.4 MB.
+- **Published:** added this note as a commit and pushed every commit to `main` (no squash, no force-push);
+  set Pages to GitHub Actions. The Pages workflow passed (test, build, deploy):
+  [run 36370123069](https://github.com/vincedelatorre/battleship-claude-higgsfield-devin/actions/runs/36370123069).
+- **Live:** https://vincedelatorre.github.io/battleship-claude-higgsfield-devin/ serves the game and its music.

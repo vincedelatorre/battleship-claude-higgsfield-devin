@@ -4,6 +4,19 @@ Pirate Battleship with a twist: four captains, each with one Gambit per battle, 
 storm at sea. Rewritten from the C++/DirectX version as a three.js web game, so it runs in any
 current browser, including Safari and Chrome on a Mac.
 
+**Play it now:** https://vincedelatorre.github.io/battleship-claude-higgsfield-devin/
+
+## How it was made
+
+Three AI tools, one handoff chain:
+
+1. **Claude**: the three.js web edition was built in a session with Claude: game code, rules engine and
+   computer captain, tests, build scripts and the GitHub Pages workflow (commits up to `83112c9`).
+2. **Higgsfield**: all the art: captain portraits and performance clips, title key art, Gambit emblems,
+   the rigged crew and the galleon (see [Art](#art)).
+3. **Devin**: took Claude's handoff, verified the build and tests, published this repo and turned on
+   GitHub Pages. The handoff note, with Devin's outcome, is in [DEVIN_HANDOFF.md](DEVIN_HANDOFF.md).
+
 ## Play
 
 ```
