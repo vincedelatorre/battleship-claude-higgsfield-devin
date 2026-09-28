@@ -1,7 +1,7 @@
 import { Music } from './music.js';
 
 // Player-adjustable mix, saved between sessions. Sea and rain sit well under the music.
-export const AUDIO_DEFAULTS = { master: 0.8, music: 0.55, effects: 1, sea: 0.3, rain: 0.25, wind: 1, duck: true, muted: false };
+export const AUDIO_DEFAULTS = { master: 0.8, music: 0.55, effects: 0.8, sea: 0.03, rain: 0.04, wind: 0.23, duck: true, muted: false };
 const KEY = 'captains-gambit-audio';
 function loadSettings() {
   try { return { ...AUDIO_DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch (_) { return { ...AUDIO_DEFAULTS }; }
