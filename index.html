@@ -437,6 +437,7 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
    Scrollable panels keep vertical panning (touch-action stops at the nearest scroll container). */
 html, body { touch-action: none; overscroll-behavior: none; }
 canvas#gl, .layer, #versus { touch-action: none; }
+#title { touch-action: pan-y; }
 .modal .panel { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 .modal input[type=range] { touch-action: pan-y; }
 html.touch, html.touch body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
