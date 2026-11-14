@@ -792,7 +792,8 @@ export class Game {
     const tp = this._tp;
     if (!tp || e.pointerId !== tp.id) return;
     const h = this._touchCell(e.clientX, e.clientY, tp.where);
-    if (!h || (h.cell.x === tp.cur.x && h.cell.y === tp.cur.y)) return;
+    if (!h) { tp.moved = true; tp.confirm = false; return; }   // sliding off the chart aborts the tap
+    if ((h.cell.x === tp.cur.x && h.cell.y === tp.cur.y)) return;
     tp.cur = h.cell;
     if (h.cell.x !== tp.start.x || h.cell.y !== tp.start.y) { tp.moved = true; tp.confirm = false; }
     if (tp.kind === 'place') { if (h.side === 0) this._setPlaceAim(h.cell); }
