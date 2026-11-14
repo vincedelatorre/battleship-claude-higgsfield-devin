@@ -125,6 +125,7 @@ export class TouchControls {
     const show = (sel, on) => $(sel).classList.toggle('tc-off', !on);
     this.root.dataset.on = modal ? '' : '1';
     this.root.dataset.view = deck ? 'deck' : 'chart';
+    this.root.dataset.screen = g.screen;
     this.root.classList.toggle('sea', deck && g.chartOpen);
     show('#tc-menu', g.screen === 'battle' && !g.paused);
     show('#tc-help', g.screen === 'title' || g.screen === 'placement');
@@ -133,8 +134,8 @@ export class TouchControls {
     show('#tc-confirm', !!ta && mine);
     $('#tc-confirm').textContent = confirmLabel;
     show('#tc-rotate', holding || (mine && g.aim === 'ghostPlace'));
-    // A Gambit in progress is cancelled from the Gambit button, which then reads "Cancel Gambit".
-    show('#tc-cancel', holding || (!!ta && mine) || (aiming && !gambit));
+    // On deck a Gambit in progress is cancelled from the Gambit button ("Cancel Gambit"); the chart view uses Cancel.
+    show('#tc-cancel', holding || (!!ta && mine) || (aiming && (!gambit || !deck)));
     $('#tc-cancel').textContent = holding ? 'Put back' : ta ? 'Clear aim' : 'Cancel';
     show('#tc-chart', deck);
     $('#tc-chart').textContent = g.chartOpen ? 'Close chart' : 'Sea chart';

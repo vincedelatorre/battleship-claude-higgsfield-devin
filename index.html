@@ -123,7 +123,7 @@ kbd { font-family: var(--body); font-size: 0.85em; border: 1px solid var(--brass
 .gambit-bar.spent { opacity: 0.55; cursor: default; }
 @keyframes glow { 50% { box-shadow: 0 0 22px rgba(240,196,110,0.35); } }
 .gambit-bar.std { cursor: default; grid-template-columns: 1fr; text-align: center; }
-.toast { position: fixed; left: 50%; bottom: calc(96px + var(--sa-b)); transform: translateX(-50%); padding: 7px 16px; font-size: 16px; background: rgba(4,8,10,0.85); border: 1px solid var(--brass-dim); border-radius: 2px; transition: opacity 0.3s; white-space: nowrap; max-width: calc(100vw - 24px); }
+.toast { position: fixed; left: 50%; bottom: calc(96px + var(--sa-b)); transform: translateX(-50%); padding: 7px 16px; font-size: 16px; background: rgba(4,8,10,0.85); border: 1px solid var(--brass-dim); border-radius: 2px; transition: opacity 0.3s; white-space: nowrap; pointer-events: none; max-width: calc(100vw - 24px); }
 .banner { opacity: 0; position: fixed; left: 0; right: 0; top: 40%; transform: translateY(-50%); text-align: center; pointer-events: none; }
 .banner .ribbon { display: inline-block; padding: 14px 70px 16px; background: linear-gradient(90deg, rgba(4,8,10,0), rgba(4,8,10,0.75) 18%, rgba(4,8,10,0.75) 82%, rgba(4,8,10,0)); }
 .banner h2 { font-size: clamp(40px, 6vw, 76px); line-height: 1; text-shadow: 0 3px 20px #000; }
@@ -479,6 +479,23 @@ html.touch #seachart { right: calc(150px + env(safe-area-inset-right, 0px)); wid
   #tc[data-view="chart"] .tc-rail { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
   html.touch #deck .feed { bottom: 170px; }
 }
+/* compact layouts: menu/help sit in the top bar; chart-view actions cover the Gambit bar (battle) or the left column foot (placement) */
+#tc[data-view="chart"] #tc-gambit { display: none !important; }
+html.lay-port #tc .tc-corner, html.lay-land #tc .tc-corner { top: calc(1px + var(--sa-t)); bottom: auto; left: calc(var(--gap) + var(--sa-l)); flex-direction: row; gap: 6px; }
+html.lay-port #tc .tc-corner .tc-round, html.lay-land #tc .tc-corner .tc-round { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+html.touch.lay-port .topbar { padding-left: calc(58px + var(--sa-l)); }
+html.touch.lay-land .topbar .turn { left: calc(var(--gap) + var(--sa-l) + 52px); width: calc(var(--side) - 52px); }
+html.touch.lay-land .side { top: calc(50px + var(--sa-t)); }
+html.touch.lay-land #deck .shipcard { left: calc(58px + var(--sa-l)); }
+html.touch.lay-port #deck .shipcard { top: calc(70px + var(--sa-t)); }
+html.touch.lay-port #deck .turn { top: calc(132px + var(--sa-t)); }
+html.lay-port #tc[data-view="chart"] .tc-rail, html.lay-land #tc[data-view="chart"] .tc-rail { flex-direction: row; gap: 6px; bottom: calc(var(--gap) + var(--sa-b)); }
+html.lay-port #tc[data-view="chart"] .tc-rail .tc-btn, html.lay-land #tc[data-view="chart"] .tc-rail .tc-btn { flex: 1 1 0; min-width: 0; min-height: 56px; padding: 6px 8px; border-radius: 6px; }
+html.lay-port #tc[data-screen="battle"][data-view="chart"] .tc-rail { left: calc(52px + var(--sa-l)); right: calc(var(--gap) + var(--sa-r)); width: auto; }
+html.lay-land #tc[data-screen="battle"][data-view="chart"] .tc-rail { left: auto; right: calc(var(--gap) + var(--sa-r)); width: var(--side); }
+html.lay-port #tc[data-screen="battle"][data-view="chart"] .tc-rail:has(.tc-btn:not(.tc-off)), html.lay-land #tc[data-screen="battle"][data-view="chart"] .tc-rail:has(.tc-btn:not(.tc-off)) { background: rgba(6, 11, 14, 0.97); border-radius: 6px; }
+html.lay-port #tc[data-screen="placement"] .tc-rail { left: calc(var(--gap) + var(--sa-l)); right: calc(50% + var(--gap) / 2); bottom: calc(52px + var(--sa-b)); width: auto; }
+html.lay-land #tc[data-screen="placement"] .tc-rail { left: calc(var(--gap) + var(--sa-l)); right: auto; bottom: calc(52px + var(--sa-b)); width: var(--side); }
 </style>
 </head>
 <body>
