@@ -24,7 +24,7 @@ export class TouchControls {
   // The last kind of pointer pressed wins: a tap shows the touch controls, a mouse click hides them.
   noteInput(e) {
     if (e.pointerType === 'touch' || e.pointerType === 'pen') this.setTouch(true);
-    else if (e.pointerType === 'mouse' && !window.matchMedia?.('(pointer: coarse)').matches) this.setTouch(false);
+    else if (e.pointerType === 'mouse') this.setTouch(false);
   }
   setTouch(on) {
     if (this.game.touchUI === on) return;
