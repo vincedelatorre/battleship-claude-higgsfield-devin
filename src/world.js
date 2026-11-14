@@ -507,6 +507,8 @@ export class World {
     this.q = quality;
     this.renderScale = 1;
     this.contextLost = false;
+    // No renderable half-float target (CPU ocean path): 8-bit scene buffers, no bloom/PMREM (both need RGBA16F).
+    this.noHalf = !!caps && !caps.halfRT;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(pixelRatioFor(this.q, innerWidth, innerHeight));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -555,12 +557,12 @@ export class World {
     this._buildRain();
     this.rainU.uSun.value = this.ocean.uniforms.uSunDir.value;
 
-    this.composer = new EffectComposer(this.renderer);
+    this.composer = new EffectComposer(this.renderer, this.noHalf ? new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.UnsignedByteType }) : undefined);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.5, 1.0);
     // Bloom's blur chain at a fraction of the screen resolution on tablets; off entirely on phones.
     if (this.q.bloomScale !== 1) { const set = this.bloom.setSize.bind(this.bloom), k = this.q.bloomScale; this.bloom.setSize = (w, h) => set(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))); }
-    this.bloom.enabled = this.q.bloom;
+    this.bloom.enabled = this.q.bloom && !this.noHalf;
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uVignette: { value: 1 }, uHurt: { value: 0 } },
@@ -620,6 +622,7 @@ export class World {
   // Image-based lighting: capture the storm-and-sunset sky once and let every PBR surface
   // (the pirates' skin, leather and cloth, the ships' wood) reflect and be lit by it.
   _buildEnv() {
+    if (this.noHalf) return;
     try {
       const pm = new THREE.PMREMGenerator(this.renderer);
       const envScene = new THREE.Scene();
@@ -634,7 +637,7 @@ export class World {
   // Render-resolution scale and bloom from the frame-time governor (auto quality only).
   setRenderScale(scale, bloomOff = false) {
     this.renderScale = scale;
-    this.bloom.enabled = this.q.bloom && !bloomOff;
+    this.bloom.enabled = this.q.bloom && !this.noHalf && !bloomOff;
     if (this.w) this.resize(this.w, this.h);
   }
 
