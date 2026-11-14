@@ -3,7 +3,6 @@
   "appName": "Captain's Gambit",
   "webDir": "dist",
   "backgroundColor": "#04080a",
-  "loggingBehavior": "debug",
   "zoomEnabled": false,
   "ios": {
     "contentInset": "never",
@@ -15,8 +14,7 @@
   "android": {
     "backgroundColor": "#04080a",
     "allowMixedContent": false,
-    "captureInput": false,
-    "webContentsDebuggingEnabled": true
+    "captureInput": false
   },
   "plugins": {
     "SplashScreen": {
