@@ -1,0 +1,95 @@
+# Builds the native apps so they can be checked without a Mac or Android Studio:
+#   - Android: debug APK (artifact "captains-gambit-android-debug"), install it with `adb install`.
+#   - iOS: unsigned simulator build (artifact "captains-gambit-ios-simulator"), plus screenshots of the
+#     app running in an iPhone and an iPad simulator (artifact "captains-gambit-ios-screenshots").
+# Signing, device builds and TestFlight need an Apple developer account (see README, Mobile / native apps).
+name: Native apps (Android APK, iOS simulator)
+
+on:
+  push:
+    branches: [main, mobile-native]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm test
+      - run: npm run cap:sync
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: captains-gambit-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run cap:sync
+      - run: xcodebuild -version
+      - name: Build for the iOS simulator (unsigned)
+        run: |
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ios/build CODE_SIGNING_ALLOWED=NO build
+      - name: Zip the app
+        run: cd ios/build/Build/Products/Debug-iphonesimulator && zip -qry "$GITHUB_WORKSPACE/CaptainsGambit-simulator.zip" App.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: captains-gambit-ios-simulator
+          path: CaptainsGambit-simulator.zip
+          if-no-files-found: error
+      - name: Run it on an iPhone and an iPad simulator, take screenshots
+        continue-on-error: true
+        run: |
+          APP=ios/build/Build/Products/Debug-iphonesimulator/App.app
+          mkdir -p ios-screenshots
+          for kind in iPhone iPad; do
+            udid=$(xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          devs = [d for rt, ds in json.load(sys.stdin)['devices'].items() if 'iOS' in rt for d in ds]
+          pick = [d for d in devs if d['name'].startswith('$kind') and ('Pro' in d['name'])] or [d for d in devs if d['name'].startswith('$kind')]
+          print(pick[-1]['udid'] if pick else '')")
+            [ -z "$udid" ] && { echo "no $kind simulator"; continue; }
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl install "$udid" "$APP"
+            xcrun simctl launch "$udid" com.vincedelatorre.captainsgambit
+            sleep 40
+            xcrun simctl io "$udid" screenshot "ios-screenshots/$kind-portrait.png"
+            xcrun simctl shutdown "$udid" || true
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: captains-gambit-ios-screenshots
+          path: ios-screenshots
+          if-no-files-found: ignore

@@ -9,23 +9,34 @@
     "preview": "vite preview",
     "test": "node tests/rules.test.js",
     "balance": "node tests/rules.test.js --balance 200",
-    "build:site": "node scripts/build-site.mjs"
+    "build:site": "node scripts/build-site.mjs",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "assets": "node scripts/generate-app-assets.mjs",
+    "cap:sync": "npm run build:mobile && cap sync",
+    "cap:ios": "npm run cap:sync && cap open ios",
+    "cap:android": "npm run cap:sync && cap open android",
+    "android:apk": "npm run cap:sync && cd android && ./gradlew assembleDebug"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
+    "@capacitor/splash-screen": "^8.0.2",
     "three": "^0.170.0"
   },
   "type": "module",
   "private": true,
   "devDependencies": {
-    "esbuild": "^0.28.2",
-    "vite": "^8.3.1",
+    "@capacitor/cli": "^8.6.2",
     "@gltf-transform/core": "^4.5.0",
     "@gltf-transform/extensions": "^4.5.0",
     "@gltf-transform/functions": "^4.5.0",
+    "esbuild": "^0.28.2",
     "meshoptimizer": "^1.3.0",
-    "sharp": "^0.35.5"
+    "sharp": "^0.35.5",
+    "vite": "^8.3.1"
   }
 }
