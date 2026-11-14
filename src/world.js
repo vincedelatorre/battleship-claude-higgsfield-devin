@@ -661,6 +661,7 @@ export class World {
     this.w = w; this.h = h;
     this.renderer.setPixelRatio(pixelRatioFor(this.q, w, h, this.renderScale));
     this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
