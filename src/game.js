@@ -739,7 +739,7 @@ export class Game {
     if (!this.world.inChartView()) return;
     const c = this._hoverCell();
     if (!c) return;
-    if (this.screen === 'placement') this._placementClick(c.cell);
+    if (this.screen === 'placement') { this.hover = c.cell; this._placementClick(c.cell); }   // hover may still be the touch preview
     else if (this.screen === 'battle' && this.match.current === 0 && !this.busy() && this.aim) this._aimClick(c.cell, c.side);
   }
   _seaChartClick(e) {
