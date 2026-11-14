@@ -420,6 +420,54 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
   #audio-panel .audio-box { max-width: 680px; }
 }
 @media (prefers-reduced-motion: reduce) { #keyart.on, #versus .me, #versus .foe, #versus .vs-mid, .gambit-bar.ready, .banner.show .ribbon, .shake { animation: none; } }
+
+/* ---------------- touch controls ---------------- */
+/* No browser gestures over the game: pinch/double-tap zoom, pull-to-refresh, rubber-band scroll.
+   Scrollable panels keep vertical panning (touch-action stops at the nearest scroll container). */
+html, body { touch-action: none; overscroll-behavior: none; }
+canvas#gl, .layer, #versus { touch-action: none; }
+.modal .panel { touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.modal input[type=range] { touch-action: pan-y; }
+html.touch, html.touch body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+html:not(.touch) .touch-only, html:not(.touch) #tc { display: none !important; }
+html.touch .kb-only, html.touch kbd, html.touch #deck .keys, html.touch .audio-check .hint { display: none !important; }
+/* Touch targets: at least 44 x 44 CSS px. */
+html.touch .btn, html.touch .dock-item, html.touch .seg button { min-height: 44px; }
+html.touch #audio-btn { width: 44px; height: 44px; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+html.touch .audio-check input { width: 22px; height: 22px; }
+html.touch .toast { white-space: normal; max-width: calc(100vw - 32px); text-align: center; }
+html.touch #deck .feed { bottom: 200px; left: calc(20px + env(safe-area-inset-left, 0px)); }
+html.touch #seachart { right: calc(150px + env(safe-area-inset-right, 0px)); width: min(460px, 44vw, calc(100vh - 40px)); }
+#tc { position: fixed; inset: 0; pointer-events: none; font-family: var(--display); }
+#tc[data-on=""] { display: none; }
+#tc .tc-off { display: none !important; }
+.tc-btn { pointer-events: auto; min-width: 48px; min-height: 48px; padding: 8px 14px; background: rgba(8, 15, 19, 0.88); border: 1px solid var(--brass); border-radius: 24px; color: var(--sail); font-family: var(--display); font-size: 17px; line-height: 1.1; letter-spacing: 0.03em; touch-action: manipulation; box-shadow: 0 4px 16px rgba(0,0,0,0.5); }
+.tc-btn:active { background: rgba(201, 161, 91, 0.3); }
+.tc-btn[disabled] { opacity: 0.4; }
+.tc-btn.primary { background: var(--ember); border-color: #f08a5a; color: #1a0b04; font-size: 19px; min-height: 56px; }
+.tc-btn.primary:active { background: #ec7443; }
+.tc-btn.tc-gold { border-color: #f0c46e; color: #f0c46e; }
+.tc-round { width: 48px; padding: 0; display: grid; place-items: center; font-size: 22px; }
+.tc-corner { position: absolute; left: calc(12px + env(safe-area-inset-left, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column-reverse; gap: 10px; }
+.tc-rail { position: absolute; right: calc(12px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 132px; }
+#tc[data-view="chart"] .tc-rail { bottom: calc(110px + env(safe-area-inset-bottom, 0px)); }
+.tc-ships { position: absolute; right: calc(12px + env(safe-area-inset-right, 0px)); top: calc(12px + env(safe-area-inset-top, 0px)); display: flex; gap: 8px; }
+.tc-ship { width: 52px; padding: 4px 0; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.tc-ship b { font-weight: normal; font-size: 20px; }
+.tc-ship span { font-family: var(--body); font-size: 9.5px; color: var(--sail-dim); white-space: nowrap; overflow: hidden; max-width: 48px; text-overflow: ellipsis; }
+.tc-ship.on { border-color: #f0c46e; background: rgba(201, 161, 91, 0.22); }
+.tc-stick { position: absolute; left: calc(72px + env(safe-area-inset-left, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: 168px; height: 168px; display: grid; place-items: center; pointer-events: auto; touch-action: none; }
+.tc-base { width: 132px; height: 132px; border-radius: 50%; border: 1px solid var(--brass-dim); background: radial-gradient(circle, rgba(8,15,19,0.35), rgba(8,15,19,0.7)); display: grid; place-items: center; }
+.tc-knob { width: 58px; height: 58px; border-radius: 50%; border: 1px solid var(--brass); background: rgba(201, 161, 91, 0.25); box-shadow: 0 4px 14px rgba(0,0,0,0.5); transition: transform 0.12s; }
+.tc-stick.on .tc-knob { transition: none; background: rgba(201, 161, 91, 0.4); }
+.tc-stick.run .tc-knob { border-color: #f0c46e; background: rgba(240, 196, 110, 0.55); }
+@media (max-height: 500px) {
+  .tc-stick { width: 140px; height: 140px; }
+  .tc-base { width: 112px; height: 112px; }
+  .tc-rail { width: 120px; gap: 8px; }
+  #tc[data-view="chart"] .tc-rail { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+  html.touch #deck .feed { bottom: 170px; }
+}
 </style>
 </head>
 <body>
@@ -457,7 +505,8 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
   <div id="cards"></div>
   <div class="actions">
     <button class="btn primary" id="setsail">Set sail</button>
-    <div class="hint"><kbd>←</kbd> <kbd>→</kbd> choose a captain, <kbd>Enter</kbd> set sail, <kbd>F1</kbd> how to play</div>
+    <div class="hint kb-only"><kbd>←</kbd> <kbd>→</kbd> choose a captain, <kbd>Enter</kbd> set sail, <kbd>F1</kbd> how to play</div>
+    <div class="hint touch-only">Tap a captain, then Set sail. <b>?</b> shows how to play.</div>
   </div>
 </section>
 
@@ -468,9 +517,12 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
     <div class="panel box">
       <h2>Deploying</h2>
       <ul class="howto">
-        <li>Click a ship in the dock, or one on the chart, to pick it up.</li>
-        <li>Click a square to drop it. Each hull section sits in its own square.</li>
-        <li><kbd>R</kbd> or right-click turns the ship.</li>
+        <li class="kb-only">Click a ship in the dock, or one on the chart, to pick it up.</li>
+        <li class="kb-only">Click a square to drop it. Each hull section sits in its own square.</li>
+        <li class="kb-only"><kbd>R</kbd> or right-click turns the ship.</li>
+        <li class="touch-only">Tap a ship in the dock, or one on the chart, to pick it up.</li>
+        <li class="touch-only">Tap a square to drop it, or drag a ship to move it. Each hull section sits in its own square.</li>
+        <li class="touch-only">Rotate turns the ship you're holding.</li>
         <li>Ships go across or down, never diagonally, and can't overlap.</li>
       </ul>
     </div>
@@ -507,11 +559,29 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
   <div class="panel shipcard"><h2 id="dk-ship"></h2><p id="dk-sub"></p></div>
   <div class="turn" id="dk-turn"></div>
   <div id="crosshair"></div>
-  <div id="clicktolook">Click, or drag, to look around</div>
+  <div id="clicktolook"><span class="kb-only">Click, or drag, to look around</span><span class="touch-only">Drag to look around, use the stick to walk</span></div>
   <div class="panel hidden" id="seachart"><h2>Sea chart: enemy waters</h2><canvas id="seacanvas"></canvas></div>
   <ol class="feed" id="dk-feed"></ol>
   <div class="keys"><kbd>W A S D</kbd> walk, <kbd>Shift</kbd> run, mouse to look, <kbd>1</kbd>–<kbd>5</kbd> change ship, <kbd>Q</kbd> sea chart, <kbd>Tab</kbd> back to the chart</div>
 </section>
+
+<!-- ---------------- touch controls (shown only on touch devices) ---------------- -->
+<div id="tc" data-on="" aria-label="Touch controls">
+  <div class="tc-corner">
+    <button class="tc-btn tc-round tc-off" id="tc-menu" type="button" data-tc="menu" aria-label="Menu"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+    <button class="tc-btn tc-round tc-off" id="tc-help" type="button" data-tc="help" aria-label="How to play">?</button>
+  </div>
+  <div class="tc-rail">
+    <button class="tc-btn primary tc-off" id="tc-confirm" type="button" data-tc="confirm">Fire</button>
+    <button class="tc-btn tc-off" id="tc-rotate" type="button" data-tc="rotate">Rotate</button>
+    <button class="tc-btn tc-off" id="tc-cancel" type="button" data-tc="cancel">Cancel</button>
+    <button class="tc-btn tc-gold tc-off" id="tc-gambit" type="button" data-tc="gambit">Gambit</button>
+    <button class="tc-btn tc-off" id="tc-chart" type="button" data-tc="chart">Sea chart</button>
+    <button class="tc-btn tc-off" id="tc-board" type="button" data-tc="board">Back to chart</button>
+  </div>
+  <div class="tc-ships tc-off" id="tc-ships" role="group" aria-label="Change ship"></div>
+  <div class="tc-stick tc-off" id="tc-stick" aria-label="Walk"><div class="tc-base"><div class="tc-knob"></div></div></div>
+</div>
 
 <div class="banner" id="banner" aria-live="assertive"><div class="ribbon"><h2 id="banner-t"></h2><p id="banner-s"></p></div></div>
 <div class="toast" id="toast" style="opacity:0" role="status"></div>
@@ -520,7 +590,7 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
   <div class="vs-side me"><div class="vs-portrait" id="vs-me-img"></div><div class="vs-name"><h2 id="vs-me-name"></h2><p id="vs-me-g"></p></div></div>
   <div class="vs-mid">versus</div>
   <div class="vs-side foe"><div class="vs-portrait" id="vs-foe-img"></div><div class="vs-name"><h2 id="vs-foe-name"></h2><p id="vs-foe-g"></p></div></div>
-  <div class="vs-skip">Click or press any key to skip</div>
+  <div class="vs-skip"><span class="kb-only">Click or press any key to skip</span><span class="touch-only">Tap to skip</span></div>
 </div>
 
 <div class="modal hidden" id="over" role="dialog" aria-modal="true" aria-labelledby="over-t">
@@ -537,6 +607,8 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
   <div class="panel"><h2>Belay that</h2>
     <button class="btn primary" data-act="resume">Resume</button>
     <button class="btn" data-act="help">How to play</button>
+    <button class="btn touch-only" type="button" data-tc-act="comfort">Comfort mode: off</button>
+    <button class="btn touch-only" type="button" data-tc-act="fullscreen">Full screen</button>
     <button class="btn" data-act="abandon">Abandon the battle</button>
   </div>
 </div>
@@ -556,9 +628,12 @@ html.lay-port #seachart h2, html.lay-land #seachart h2 { font-size: 15px; margin
     </ul>
     <h3>Controls</h3>
     <ul>
-      <li>Chart: click to fire, <kbd>G</kbd> uses your Gambit, right-click or <kbd>Esc</kbd> cancels aiming.</li>
-      <li><kbd>Tab</kbd> boards your ship: <kbd>W A S D</kbd> walk, mouse to look, <kbd>1</kbd>–<kbd>5</kbd> change ship, <kbd>Q</kbd> opens the sea chart to fire.</li>
-      <li><kbd>K</kbd> comfort mode (less shake, steady horizon), <kbd>M</kbd> mute, <kbd>F</kbd> full screen, <kbd>Esc</kbd> menu.</li>
+      <li class="kb-only">Chart: click to fire, <kbd>G</kbd> uses your Gambit, right-click or <kbd>Esc</kbd> cancels aiming.</li>
+      <li class="kb-only"><kbd>Tab</kbd> boards your ship: <kbd>W A S D</kbd> walk, mouse to look, <kbd>1</kbd>–<kbd>5</kbd> change ship, <kbd>Q</kbd> opens the sea chart to fire.</li>
+      <li class="kb-only"><kbd>K</kbd> comfort mode (less shake, steady horizon), <kbd>M</kbd> mute, <kbd>F</kbd> full screen, <kbd>Esc</kbd> menu.</li>
+      <li class="touch-only">Chart: tap a square to aim, then tap it again (or press Fire) to shoot. Drag to fine-tune the aim. Tap the Gambit bar to use your Gambit; Cancel stops aiming.</li>
+      <li class="touch-only">Board your ship: the stick walks (push it all the way to run), drag anywhere to look, the numbered buttons change ship, Sea chart lets you fire from the deck.</li>
+      <li class="touch-only">The menu button pauses, with comfort mode (less shake, steady horizon) and full screen. The speaker button sets the sound.</li>
     </ul>
     <div class="buttons" style="margin-top:18px"><button class="btn primary" data-act="closehelp">Back to the battle</button></div>
   </div>

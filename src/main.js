@@ -3,6 +3,7 @@ import { World } from './world.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { CrewDirector } from './crew.js';
+import { TouchControls } from './touch.js';
 
 const gl = document.getElementById('gl');
 const overlay = document.getElementById('overlay');
@@ -50,9 +51,25 @@ function boot() {
 
   addEventListener('keydown', (e) => { if (e.repeat && e.key === 'Tab') { e.preventDefault(); return; } game.onKey(e, true); });
   addEventListener('keyup', (e) => game.onKey(e, false));
-  addEventListener('mousemove', (e) => game.onMouseMove(e));
-  addEventListener('mousedown', (e) => game.onMouseDown(e));
-  addEventListener('mouseup', () => { game.dragLook = false; });
+  // Pointer Events: mouse, touch and Apple Pencil share one path; mouse keeps its old behaviour.
+  const touch = new TouchControls(game);
+  const isMouse = (e) => !e.pointerType || e.pointerType === 'mouse';
+  const BIT = [1, 4, 2, 8, 16];   // e.button -> e.buttons bit
+  let held = 0;
+  addEventListener('pointerdown', (e) => {
+    touch.noteInput(e);
+    if (isMouse(e)) { held = e.buttons; game.onMouseDown(e); } else game.onTouchDown(e);
+  });
+  addEventListener('pointermove', (e) => {
+    if (!isMouse(e)) { game.onTouchMove(e); return; }
+    // A second button pressed or released while another is held arrives as a pointermove.
+    if (e.buttons !== held && e.button >= 0) { held = e.buttons; if (e.buttons & BIT[e.button]) game.onMouseDown(e); else game.dragLook = false; }
+    game.onMouseMove(e);
+  });
+  addEventListener('pointerup', (e) => {
+    if (isMouse(e)) { held = e.buttons; game.dragLook = false; } else { game.audio.start(); game.onTouchUp(e); }
+  });
+  addEventListener('pointercancel', (e) => { if (isMouse(e)) { held = 0; game.dragLook = false; } else game.onTouchUp(e); });
   addEventListener('contextmenu', (e) => e.preventDefault());
   addEventListener('blur', () => { game.keys = {}; });
 
