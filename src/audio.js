@@ -16,6 +16,40 @@ export class Audio {
     // Menus use the Music level; once the versus intro ends, the battle uses Music in battle.
     this.music.level = () => (this.settings.muted ? 0 : (this.music.inBattle ? this.settings.musicBattle : this.settings.music) * this.settings.master);
     this.music.duckOn = () => this.settings.duck;
+    this._lifecycle();
+  }
+
+  // Mobile audio: start/unlock inside the first tap, follow the silent switch, suspend while the app
+  // is in the background, and recover after interruptions (calls, Siri, other apps taking the session).
+  _lifecycle() {
+    if (typeof window === 'undefined') return;
+    // iOS 16.4+: 'ambient' respects the ring/silent switch and mixes with the user's own music.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (_) { /* unsupported */ }
+    const gesture = () => {
+      if (this.background) return;
+      if (!this.ctx) { this.start(); return; }
+      if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+      this.music.ensurePlaying();
+    };
+    for (const ev of ['touchend', 'pointerup', 'click', 'keydown']) addEventListener(ev, gesture, { capture: true, passive: true });
+    const hide = () => {
+      if (this.background) return;
+      this.background = true;
+      if (this.ctx && this.ctx.state === 'running') this.ctx.suspend().catch(() => {});
+      this.music.pause();
+    };
+    const show = () => {
+      if (!this.background || document.hidden) return;
+      this.background = false;
+      // May be refused without a gesture (iOS); the next tap retries.
+      if (this.ctx && this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
+      this.music.resume();
+    };
+    document.addEventListener('visibilitychange', () => (document.hidden ? hide() : show()));
+    addEventListener('pagehide', hide);
+    addEventListener('pageshow', show);
+    // After an interruption iOS leaves the context 'interrupted'/'suspended': resume as soon as allowed.
+    this._onState = () => { if (!this.background && this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); };
   }
   // Change one mix setting (0-1 volumes, or the duck / muted switches); applied at once and saved.
   set(key, value) {
@@ -34,10 +68,14 @@ export class Audio {
 
   // Browsers only allow audio after a user gesture, so this runs on the first click or key.
   start() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); this.music.start(this.ctx); return; }
+    if (this.ctx) { if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {}); this.music.start(this.ctx); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    this.ctx = new AC();
+    this.ctx = new AC({ latencyHint: 'interactive' });
+    this.ctx.addEventListener?.('statechange', () => this._onState?.());
+    // iOS: play one silent buffer inside the gesture so the context is unlocked for later sounds.
+    try { const b = this.ctx.createBuffer(1, 1, 22050), s = this.ctx.createBufferSource(); s.buffer = b; s.connect(this.ctx.destination); s.start(0); } catch (_) { /* ignore */ }
+    if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
     this.master = this.ctx.createGain();
     this.master.gain.value = this.settings.muted ? 0 : this.settings.master;
     this.fx = this.ctx.createGain();                 // sound effects channel

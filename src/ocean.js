@@ -13,7 +13,8 @@
 import * as THREE from 'three';
 
 const G = 9.81;
-const FFT_N = 256;
+const FFT_N = 256;      // default GPU FFT size (quality tiers may use 128)
+const CPU_FFT_N = 64;   // last-resort CPU simulation when the GPU can't render to float textures
 const CPU_N = 64;
 export const CASCADES = [
   { L: 617.0, kLo: 0.0001, kHi: (2 * Math.PI / 97.3) * 6, chop: 1.25 },
@@ -138,7 +139,10 @@ float vnoise(vec2 p) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(hash12(i), hash12(i + vec2(1, 0)), u.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), u.x), u.y);
 }
-float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 6; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
+#ifndef FBM_OCT
+#define FBM_OCT 6
+#endif
+float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < FBM_OCT; i++) { s += a * vnoise(p); p = p * 2.03 + vec2(17.1, 9.2); a *= 0.5; } return s; }
 
 // How far a direction lies in the sunset clearing (1) rather than the storm (0). The boundary
 // is ragged and drifts, so the two halves of the sky blend through torn cloud, never a line.
@@ -212,7 +216,7 @@ uniform vec3 Ls;
 uniform float uDetail, uCalm;
 varying vec3 vWorld;
 varying float vDist;
-float lodFor(float spacing, float L) { return max(0.0, log2(spacing * 256.0 / L)); }
+float lodFor(float spacing, float L) { return max(0.0, log2(spacing * FFT_N_F / L)); }
 void main() {
   vec3 wp = (modelMatrix * vec4(position, 1.0)).xyz;
   float dist = length(wp.xz - cameraPosition.xz);
@@ -406,8 +410,14 @@ function ifft2d(re, im, n) {
 
 // ------------------------------------------------------------------ Ocean
 export class Ocean {
-  constructor(renderer, { seed = 7, wind = 22, fetch = 60000, windDir = -0.6, hs = 5.2 } = {}) {
+  constructor(renderer, { seed = 7, wind = 22, fetch = 60000, windDir = -0.6, hs = 5.2, fftN = FFT_N, grid = 320, fbmOctaves = 6, caps = null } = {}) {
     this.renderer = renderer;
+    // The FFT ping-pongs through float targets. Without EXT_color_buffer_float (many phones, older iOS)
+    // use half floats; with no renderable float format at all, run a small FFT on the CPU instead.
+    this.rtType = !caps || caps.floatRT ? THREE.FloatType : caps.halfRT ? THREE.HalfFloatType : null;
+    this.cpuMode = !this.rtType;
+    const N = (this.N = this.cpuMode ? CPU_FFT_N : fftN);
+    this.grid = grid; this.fbmOctaves = fbmOctaves;
     this.hs = hs;
     this.time = 0;
     this.params = { wind, fetch, windDir };
@@ -421,7 +431,7 @@ export class Ocean {
     // Initial spectra h0(k) and conj(h0(-k)), and the variance to normalise wave height.
     let variance = 0;
     const raw = CASCADES.map((c) => {
-      const N = FFT_N, dk = (2 * Math.PI) / c.L;
+      const dk = (2 * Math.PI) / c.L;
       const amp = new Float32Array(N * N * 2);
       for (let y = 0; y < N; y++)
         for (let x = 0; x < N; x++) {
@@ -440,7 +450,6 @@ export class Ocean {
     this.scale = hs / 4 / Math.sqrt(Math.max(variance, 1e-9));
 
     this.cascades = CASCADES.map((c, ci) => {
-      const N = FFT_N;
       const data = new Float32Array(N * N * 4);
       const amp = raw[ci];
       for (let y = 0; y < N; y++)
@@ -450,11 +459,13 @@ export class Ocean {
           data[o] = amp[i] * this.scale; data[o + 1] = amp[i + 1] * this.scale;
           data[o + 2] = amp[j] * this.scale; data[o + 3] = -amp[j + 1] * this.scale;
         }
+      const cpuSpec = c === CASCADES[0] ? this._cpuSpectrum(amp) : null;
+      if (this.cpuMode) return { ...c, data, cur: 0, cpu: cpuSpec, ...this._cpuTargets() };
       const h0 = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.FloatType);
       h0.minFilter = h0.magFilter = THREE.NearestFilter;
       h0.needsUpdate = true;
       const fftRT = () => new THREE.WebGLRenderTarget(N, N, {
-        count: 2, type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter,
+        count: 2, type: this.rtType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter,
         magFilter: THREE.NearestFilter, depthBuffer: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping,
       });
       const outRT = () => {
@@ -471,12 +482,12 @@ export class Ocean {
         }
         return rt;
       };
-      return { ...c, h0, ping: fftRT(), pong: fftRT(), out: [outRT(), outRT()], cur: 0, cpu: c === CASCADES[0] ? this._cpuSpectrum(amp) : null };
+      return { ...c, h0, ping: fftRT(), pong: fftRT(), out: [outRT(), outRT()], cur: 0, cpu: cpuSpec };
     });
 
     const mat = (fs, uniforms) => new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, vertexShader: QUAD_VS, fragmentShader: fs, uniforms, depthTest: false, depthWrite: false });
-    this.evolveMat = mat(EVOLVE_FS, { h0: { value: null }, time: { value: 0 }, L: { value: 1 }, N: { value: FFT_N } });
-    this.fftMat = mat(FFT_FS, { in0: { value: null }, in1: { value: null }, N: { value: FFT_N }, size: { value: 2 }, horizontal: { value: 1 } });
+    this.evolveMat = mat(EVOLVE_FS, { h0: { value: null }, time: { value: 0 }, L: { value: 1 }, N: { value: N } });
+    this.fftMat = mat(FFT_FS, { in0: { value: null }, in1: { value: null }, N: { value: N }, size: { value: 2 }, horizontal: { value: 1 } });
     this.resolveMat = mat(RESOLVE_FS, {
       f0: { value: null }, f1: { value: null }, prevDisp: { value: null }, chop: { value: 1 }, dt: { value: 0.016 },
       foamBias: { value: 0.58 }, foamGain: { value: 3.0 }, foamDecay: { value: 0.7 },
@@ -494,7 +505,7 @@ export class Ocean {
 
   // Low-frequency subset of cascade 0 for the CPU copy (indices -32..31 in each axis).
   _cpuSpectrum(amp) {
-    const N = FFT_N, n = CPU_N, out = [];
+    const N = this.N, n = Math.min(CPU_N, N), out = [];
     for (let y = 0; y < n; y++)
       for (let x = 0; x < n; x++) {
         const ix = x < n / 2 ? x : x - n, iy = y < n / 2 ? y : y - n;
@@ -507,7 +518,7 @@ export class Ocean {
 
   _buildSurface() {
     // A camera-centred grid that is dense near the middle and stretches to the horizon.
-    const R = 6000, S = 320;
+    const R = 6000, S = this.grid;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array((S + 1) * (S + 1) * 3);
     const warp = (u) => Math.sign(u) * Math.pow(Math.abs(u), 2.6) * R;
@@ -542,7 +553,7 @@ export class Ocean {
       uLights: { value: lights }, uLightCols: { value: lightCols },
       uFogColor: { value: new THREE.Color(0.06, 0.085, 0.11) }, uFogDensity: { value: 0.00045 },
     };
-    this.material = new THREE.ShaderMaterial({ vertexShader: OCEAN_VS, fragmentShader: OCEAN_FS, uniforms: this.uniforms });
+    this.material = new THREE.ShaderMaterial({ vertexShader: OCEAN_VS, fragmentShader: OCEAN_FS, uniforms: this.uniforms, defines: { FFT_N_F: this.N.toFixed(1), FBM_OCT: this.fbmOctaves } });
     this.mesh = new THREE.Mesh(geo, this.material);
     this.mesh.frustumCulled = false;
   }
@@ -555,7 +566,8 @@ export class Ocean {
 
   update(dt) {
     this.time += dt;
-    if (this.frozen) { this.uniforms.uTime.value = this.time; if ((this._cpuTick = (this._cpuTick || 0) + 1) % 3 === 1) this._updateCpu(); return; }
+    if (this.frozen || this.paused) { this.uniforms.uTime.value = this.time; if ((this._cpuTick = (this._cpuTick || 0) + 1) % 3 === 1) this._updateCpu(); return; }
+    if (this.cpuMode) { this._updateCpuCascades(dt); this._publish(); return; }
     const r = this.renderer;
     const prevTarget = r.getRenderTarget();
     const prevAutoClear = r.autoClear;
@@ -567,7 +579,7 @@ export class Ocean {
       this._pass(this.evolveMat, c.ping);
       let src = c.ping, dst = c.pong;
       for (const horizontal of [1, 0])
-        for (let size = 2; size <= FFT_N; size *= 2) {
+        for (let size = 2; size <= this.N; size *= 2) {
           const u = this.fftMat.uniforms;
           u.in0.value = src.textures[0]; u.in1.value = src.textures[1];
           u.size.value = size; u.horizontal.value = horizontal;
@@ -584,13 +596,73 @@ export class Ocean {
     }
     r.setRenderTarget(prevTarget);
     r.autoClear = prevAutoClear;
+    this._publish();
+  }
+
+  _publish() {
     const U = this.uniforms;
-    this.cascades.forEach((c, i) => { U['disp' + i].value = c.out[c.cur].textures[0]; U['der' + i].value = c.out[c.cur].textures[1]; });
+    this.cascades.forEach((c, i) => {
+      if (this.cpuMode) { U['disp' + i].value = c.disp; U['der' + i].value = c.der; }
+      else { U['disp' + i].value = c.out[c.cur].textures[0]; U['der' + i].value = c.out[c.cur].textures[1]; }
+    });
     U.uTime.value = this.time;
     U.uDetail.value = this.detail;
     U.uCalm.value = this.calm;
     // The CPU swell (ship motion only) changes slowly: refresh it every third frame.
     if ((this._cpuTick = (this._cpuTick || 0) + 1) % 3 === 1) this._updateCpu();
+  }
+
+  // After a WebGL context loss every render target comes back empty: rebuild them right away.
+  restore() { if (!this.cpuMode) for (const c of this.cascades) c.cur = 0; this.update(0.016); }
+
+  // ---- CPU fallback (no renderable float format): the same evolve / inverse FFT / resolve as the
+  // shaders, at 64x64, uploaded as half-float textures. Coarser, but the sea still moves and foams.
+  _cpuTargets() {
+    const n = this.N, tex = () => {
+      const t = new THREE.DataTexture(new Uint16Array(n * n * 4), n, n, THREE.RGBAFormat, THREE.HalfFloatType);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.minFilter = t.magFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+      return t;
+    };
+    const f = () => [new Float64Array(n * n), new Float64Array(n * n)];
+    return { disp: tex(), der: tex(), fields: [f(), f(), f(), f()], foam: new Float32Array(n * n), acc: 0 };
+  }
+  _updateCpuCascades(dt) {
+    const n = this.N, toHalf = THREE.DataUtils.toHalfFloat;
+    this._cpuFrame = (this._cpuFrame || 0) + 1;
+    for (const [ci, c] of this.cascades.entries()) {
+      c.acc += dt;
+      if (this._cpuFrame > 1 && (this._cpuFrame + ci) % 2) continue;   // each cascade at half rate, staggered
+      const step = Math.min(c.acc, 0.1); c.acc = 0;
+      const [[r0, i0], [r1, i1], [r2, i2], [r3, i3]] = c.fields, d = c.data, t = this.time;
+      for (let y = 0; y < n; y++)
+        for (let x = 0; x < n; x++) {
+          const q = y * n + x, o = q * 4;
+          const kx = (2 * Math.PI * (x < n / 2 ? x : x - n)) / c.L, kz = (2 * Math.PI * (y < n / 2 ? y : y - n)) / c.L, k = Math.hypot(kx, kz);
+          const w = Math.sqrt(G * k), ec = Math.cos(w * t), es = Math.sin(w * t);
+          const hr = d[o] * ec - d[o + 1] * es + d[o + 2] * ec + d[o + 3] * es;
+          const hi = d[o] * es + d[o + 1] * ec - d[o + 2] * es + d[o + 3] * ec;
+          const ik = k > 1e-6 ? 1 / k : 0;
+          // pack2(a, b) = a + i b, exactly as EVOLVE_FS
+          const dxr = hi * kx * ik, dxi = -hr * kx * ik, dzr = hi * kz * ik, dzi = -hr * kz * ik;
+          const hxr = -hi * kx, hxi = hr * kx, hzr = -hi * kz, hzi = hr * kz;
+          const xx = kx * kx * ik, zz = kz * kz * ik, xz = kx * kz * ik;
+          r0[q] = hr - dxi; i0[q] = hi + dxr;
+          r1[q] = dzr - hxi; i1[q] = dzi + hxr;
+          r2[q] = hzr - hi * xx; i2[q] = hzi + hr * xx;
+          r3[q] = hr * zz - hi * xz; i3[q] = hi * zz + hr * xz;
+        }
+      for (const [re, im] of c.fields) ifft2d(re, im, n);
+      const D = c.disp.image.data, E = c.der.image.data, chop = c.chop, decay = Math.exp(-0.7 * step);
+      for (let q = 0; q < n * n; q++) {
+        const ax = r0[q], ay = i0[q], az = r1[q], aw = i1[q], bx = r2[q], by = i2[q], bz = r3[q], bw = i3[q];
+        const jxx = 1 + chop * by, jzz = 1 + chop * bz, jxz = chop * bw, J = jxx * jzz - jxz * jxz;
+        const foam = (c.foam[q] = Math.max(c.foam[q] * decay, Math.min(1, Math.max(0, (0.58 - J) * 3))));
+        const o = q * 4;
+        D[o] = toHalf(chop * ay); D[o + 1] = toHalf(ax); D[o + 2] = toHalf(chop * az); D[o + 3] = toHalf(foam);
+        E[o] = toHalf(aw / Math.max(jxx, 0.2)); E[o + 1] = toHalf(bx / Math.max(jzz, 0.2)); E[o + 2] = toHalf(J); E[o + 3] = 0;
+      }
+      c.disp.needsUpdate = c.der.needsUpdate = true;
+    }
   }
 
   // Evolve the low-frequency swell on the CPU (height and choppy displacement).

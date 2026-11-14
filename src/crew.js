@@ -32,6 +32,7 @@ function fileUrl(path) {
     const bin = atob(b64), bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     url = URL.createObjectURL(new Blob([bytes]));
+    delete window.CG_BIN_B64[path];   // the blob holds the bytes now; free the (larger) base64 string
   } else if (!window.CG_NO_FILES && window.CG_DEV_FILES && window.CG_DEV_FILES.includes(path)) url = `assets/${path}`;
   return (cache[path] = url);
 }
@@ -186,7 +187,10 @@ class CrewMember {
     const s = this.ship, t = THREE.MathUtils.clamp(this.x / s.Ls + 0.5, 0.05, 0.95);
     this.obj.position.set(this.x, s.floorY ? s.floorY(this.x, this.z) : s.deckY(t), this.z);
     this.obj.rotation.y = Math.PI / 2 - this.face;   // glTF characters face +Z
-    this.mixer.update(dt);
+    // Lower quality tiers advance the skeletons every other frame (staggered across the crew).
+    this._animDt = (this._animDt || 0) + dt;
+    if (this.animEvery > 1 && (this._animTick = (this._animTick ?? this.id) + 1) % this.animEvery) return;
+    this.mixer.update(this._animDt); this._animDt = 0;
     // Plant the feet on the planks, measured on the deformed boot soles (or foot bones as a fallback).
     this.obj.updateMatrixWorld(true);
     let minY = Infinity, target = 0.004;
@@ -210,7 +214,9 @@ class CrewMember {
 }
 
 export class CrewDirector {
-  constructor(world, audio) {
+  constructor(world, audio, quality = {}) {
+    this.maxCrew = quality.crew || 5;
+    this.animEvery = quality.crewAnimEvery || 1;
     this.world = world;
     this.audio = audio;
     this.ready = false;
@@ -253,11 +259,12 @@ export class CrewDirector {
     if (!this.crewing[shipIndex]) {
       const ids = Object.keys(this.src).map(Number);
       for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ids[i], ids[j]] = [ids[j], ids[i]]; }
-      this.crewing[shipIndex] = ids.slice(0, Math.min(5, ids.length));
+      this.crewing[shipIndex] = ids.slice(0, Math.min(this.maxCrew, ids.length));
     }
     const picks = this.crewing[shipIndex];
     picks.forEach((id, n) => {
       const c = new CrewMember(id, this.src[id], this.shared, ship);
+      c.animEvery = this.animEvery;
       const p = this._spot(0.3 + 0.12 * n, n % 2 ? 1 : -1);
       c.x = p.x; c.z = p.z; c.face = Math.random() * 6;
       ship.root.add(c.obj);

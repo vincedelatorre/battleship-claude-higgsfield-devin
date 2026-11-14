@@ -2,6 +2,7 @@
 // without image files.
 import * as THREE from 'three';
 
+let ANISO = 8, MAX_TEX = 4096;
 function canvasTex(w, h, draw, repeat = true) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -9,7 +10,7 @@ function canvasTex(w, h, draw, repeat = true) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 8;
+  t.anisotropy = ANISO;
   return t;
 }
 const rnd = (() => { let s = 12345; return () => ((s = (s * 16807) % 2147483647) / 2147483647); })();
@@ -50,9 +51,11 @@ function photoTexture(key, onReady) {
   if (!url) return;
   const img = new Image();
   img.onload = () => {
-    const w = img.naturalWidth, h = img.naturalHeight, c = document.createElement('canvas');
+    // Bounded to the tier's texture size (iOS WebViews have tight GPU memory).
+    const k = Math.min(1, MAX_TEX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k), c = document.createElement('canvas');
     c.width = w; c.height = h;
-    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0);
+    const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, w, h);
     const src = ctx.getImageData(0, 0, w, h).data, out = ctx.createImageData(w, h), o = out.data;
     const L = (x, y) => { x = (x + w) % w; y = (y + h) % h; const i = (y * w + x) * 4; return (src[i] * 0.3 + src[i + 1] * 0.59 + src[i + 2] * 0.11) / 255; };
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
@@ -60,15 +63,18 @@ function photoTexture(key, onReady) {
       o[i] = (-dx / len * 0.5 + 0.5) * 255; o[i + 1] = (-dy / len * 0.5 + 0.5) * 255; o[i + 2] = (1 / len * 0.5 + 0.5) * 255; o[i + 3] = 255;
     }
     ctx.putImageData(out, 0, 0);
-    const map = new THREE.Texture(img), normal = new THREE.CanvasTexture(c);
+    const map = k < 1 ? new THREE.CanvasTexture(copy(img, w, h)) : new THREE.Texture(img), normal = new THREE.CanvasTexture(c);
     map.colorSpace = THREE.SRGBColorSpace;
-    for (const t of [map, normal]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.needsUpdate = true; }
+    for (const t of [map, normal]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = ANISO; t.needsUpdate = true; }
     onReady(map, normal);
   };
   img.src = url;
 }
 
-export function makeTextures() {
+function copy(img, w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); return c; }
+
+export function makeTextures(q = {}) {
+  ANISO = Math.min(8, q.anisotropy || 8); MAX_TEX = q.maxTexture || 4096;
   const tex = {
     // Cabin door: vertical boards, iron studs and hinges, a small leaded window.
     door: canvasTex(256, 384, (c, w, h) => {
