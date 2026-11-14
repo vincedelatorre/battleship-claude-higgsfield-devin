@@ -124,8 +124,8 @@ export class Governor {
     const spread = s[Math.floor(s.length * 0.9)] - s[Math.floor(s.length * 0.1)];
     this.samples.length = 0;
     // Rock-steady 30/40 Hz is a display cap (iOS Low Power Mode, battery saver), not a slow GPU.
-    if (spread < 1.5 && med < 34) return;
-    if (med > this.target * 1.2) {
+    const capped = spread < 1.5 && med < 34;
+    if (!capped && med > this.target * 1.2) {
       this.good = 0;
       if (this.scale > this.q.minScale + 1e-3) this.scale = Math.max(this.q.minScale, this.scale * (med > this.target * 1.8 ? 0.75 : 0.88));
       else if (!this.bloomOff && this.q.bloom) this.bloomOff = true;
