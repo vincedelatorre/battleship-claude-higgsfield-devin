@@ -15,6 +15,7 @@ export class Music {
     if (!src) return;
     const el = (this.el = new Audio());
     el.src = src; el.loop = true; el.preload = 'auto';
+    el.setAttribute('playsinline', ''); el.setAttribute('webkit-playsinline', '');
     this.ctx = ctx;
     // Opened straight from disk (file://), browsers silence audio routed through WebAudio: there the
     // element plays directly and its own volume carries the mix (fades, ducking and mute still work).
@@ -27,6 +28,11 @@ export class Music {
     if (!this.gain) el.volume = 0;
     el.play().catch(() => {});
   }
+  // App backgrounded: stop streaming; come back to the same spot.
+  pause() { if (this.el && !this.el.paused) { this.el.pause(); this._resumeOnShow = true; } }
+  resume() { if (this.el && this._resumeOnShow) { this._resumeOnShow = false; this.el.play().catch(() => {}); } }
+  // The system can pause the element on its own (a call, Siri, another app's audio); a later tap restarts it.
+  ensurePlaying() { if (this.el && this.el.paused && !this._resumeOnShow) this.el.play().catch(() => {}); }
   setMuted(m) { this.muted = m; }
   setBattle(on) { if (this.inBattle !== on) { this.inBattle = on; this._sceneChange = true; } }
   // Dip under loud effects so the hits land, then swell back.

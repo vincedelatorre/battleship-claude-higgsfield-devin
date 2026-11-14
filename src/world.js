@@ -11,6 +11,7 @@ import { Ocean } from './ocean.js';
 import { StormSky } from './sky.js';
 import { CAPTAINS, SHIPS, cellOf, Gambit } from './rules.js';
 import { makeTextures } from './textures.js';
+import { TIERS, pixelRatioFor } from './quality.js';
 
 export const CELL = 16;
 export const WATERS_Z0 = [0, -420];            // my waters, enemy waters (row 0 edge)
@@ -417,8 +418,10 @@ void main() {
 }`;
 
 class Particles {
-  constructor(cap, additive) {
+  constructor(cap, additive, density = 1) {
     this.cap = cap;
+    this.density = density;
+    this._skip = 0;
     this.list = [];
     const g = new THREE.BufferGeometry();
     this.pos = new Float32Array(cap * 3); this.col = new Float32Array(cap * 4); this.size = new Float32Array(cap); this.seed = new Float32Array(cap);
@@ -434,9 +437,14 @@ class Particles {
     this.points.frustumCulled = false;
     this.points.renderOrder = additive ? 5 : 4;
   }
-  emit(p) { if (this.list.length < this.cap) this.list.push(p); }
+  // Lower tiers keep only a share of emitted particles (spread evenly), each a little bigger to compensate.
+  emit(p) {
+    if (this.density < 1 && (p.grow || 0) < 8) { this._skip += this.density; if (this._skip < 1) return; this._skip -= 1; p.s /= Math.sqrt(this.density) * 0.85 + 0.15; }
+    if (this.list.length < this.cap) this.list.push(p);
+  }
   update(dt, ocean) {
     this.uniforms.uTime.value += dt;
+    this._skip = 1 - this.density;   // the first emit each frame always lands
     const L = this.list;
     for (let i = L.length - 1; i >= 0; i--) {
       const p = L[i];
@@ -461,7 +469,8 @@ class Particles {
     }
     const g = this.points.geometry;
     g.setDrawRange(0, n);
-    for (const k of ['position', 'pcolor', 'size', 'seed']) g.attributes[k].needsUpdate = true;
+    // Upload only the live particles, not the whole capacity, each frame.
+    for (const k of ['position', 'pcolor', 'size', 'seed']) { const at = g.attributes[k]; at.clearUpdateRanges(); at.addUpdateRange(0, Math.max(1, n) * at.itemSize); at.needsUpdate = true; }
   }
 }
 
@@ -493,17 +502,22 @@ void main() {
 
 // ------------------------------------------------------------------ World
 export class World {
-  constructor(canvas) {
+  constructor(canvas, quality = TIERS.high, caps = null) {
     this.canvas = canvas;
+    this.q = quality;
+    this.renderScale = 1;
+    this.contextLost = false;
+    // No renderable half-float target (CPU ocean path): 8-bit scene buffers, no bloom/PMREM (both need RGBA16F).
+    this.noHalf = !!caps && !caps.halfRT;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(pixelRatioFor(this.q, innerWidth, innerHeight));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.4;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.3, 20000);
-    this.tex = makeTextures();
+    this.tex = makeTextures(this.q);
     ShipModel.tex = this.tex;
     // When the Higgsfield wood textures are present, swap them onto every ship's deck and hull.
     this.tex.loadPhotoWood((map, normal) => {
@@ -514,25 +528,18 @@ export class World {
       this.photoHull = { map, normal };
       for (const f of this.fleets) for (const s of f) s.applyPhotoWood?.(this.photoDeck, this.photoHull);
     });
-    this.ocean = new Ocean(this.renderer);
-    this.sky = new StormSky(this.ocean.uniforms);
+    this.ocean = new Ocean(this.renderer, { fftN: this.q.fftN, grid: this.q.oceanGrid, fbmOctaves: this.q.fbmOctaves, caps });
+    this.sky = new StormSky(this.ocean.uniforms, this.q);
     this.scene.add(this.sky.mesh, this.ocean.mesh, this.sky.group);
     // Image-based lighting: capture the storm-and-sunset sky once and let every PBR surface
     // (the pirates' skin, leather and cloth, the ships' wood) reflect and be lit by it.
-    try {
-      const pm = new THREE.PMREMGenerator(this.renderer);
-      const envScene = new THREE.Scene();
-      envScene.add(new THREE.Mesh(this.sky.mesh.geometry, this.sky.mesh.material));
-      this.scene.environment = pm.fromScene(envScene, 0, 1, 20000).texture;
-      this.scene.environmentIntensity = 0.55;
-      pm.dispose();
-    } catch (e) { console.warn('Environment lighting unavailable:', e.message); }
+    this._buildEnv();
 
     this.hemi = new THREE.HemisphereLight(0x9a90c0, 0x2a3a40, 1.7);
     // The low sunset sun is the key light: warm, raking, and it casts long real shadows.
     this.moon = new THREE.DirectionalLight(0xffa864, 3.4);
     this.moon.castShadow = true;
-    this.moon.shadow.mapSize.set(2048, 2048);
+    this.moon.shadow.mapSize.set(this.q.shadowMap, this.q.shadowMap);
     this.moon.shadow.bias = -0.0004;
     this.moon.shadow.normalBias = 0.04;
     this.scene.add(this.moon.target);
@@ -544,15 +551,18 @@ export class World {
     this.deckLampMesh.add(this.deckLamp);
     this.deckLampMesh.userData.keep = true;
 
-    this.alphaParts = new Particles(10000, false);
-    this.addParts = new Particles(10000, true);
+    this.alphaParts = new Particles(this.q.particles, false, this.q.particleDensity);
+    this.addParts = new Particles(this.q.particles, true, this.q.particleDensity);
     this.scene.add(this.alphaParts.points, this.addParts.points);
     this._buildRain();
     this.rainU.uSun.value = this.ocean.uniforms.uSunDir.value;
 
-    this.composer = new EffectComposer(this.renderer);
+    this.composer = new EffectComposer(this.renderer, this.noHalf ? new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.UnsignedByteType }) : undefined);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(512, 512), 0.42, 0.5, 1.0);
+    // Bloom's blur chain at a fraction of the screen resolution on tablets; off entirely on phones.
+    if (this.q.bloomScale !== 1) { const set = this.bloom.setSize.bind(this.bloom), k = this.q.bloomScale; this.bloom.setSize = (w, h) => set(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))); }
+    this.bloom.enabled = this.q.bloom && !this.noHalf;
     this.composer.addPass(this.bloom);
     this.grade = new ShaderPass({
       uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uVignette: { value: 1 }, uHurt: { value: 0 } },
@@ -596,10 +606,43 @@ export class World {
     this.rng = Math.random;
     this.onWaveCrash = null;
     this.visibleWaters = null;
+
+    // The GPU can drop the context (iOS backgrounding, memory pressure, driver resets). Ask for it
+    // back, skip GPU work meanwhile, and rebuild the GPU-generated state once it returns.
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.contextLost = true; console.warn('WebGL context lost'); });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.contextLost = false;
+      this.ocean.restore();
+      this._buildEnv();
+      this.renderer.shadowMap.needsUpdate = true;
+      console.warn('WebGL context restored');
+    });
+  }
+
+  // Image-based lighting: capture the storm-and-sunset sky once and let every PBR surface
+  // (the pirates' skin, leather and cloth, the ships' wood) reflect and be lit by it.
+  _buildEnv() {
+    if (this.noHalf) return;
+    try {
+      const pm = new THREE.PMREMGenerator(this.renderer);
+      const envScene = new THREE.Scene();
+      envScene.add(new THREE.Mesh(this.sky.mesh.geometry, this.sky.mesh.material));
+      this.scene.environment?.dispose();
+      this.scene.environment = pm.fromScene(envScene, 0, 1, 20000).texture;
+      this.scene.environmentIntensity = 0.55;
+      pm.dispose();
+    } catch (e) { console.warn('Environment lighting unavailable:', e.message); }
+  }
+
+  // Render-resolution scale and bloom from the frame-time governor (auto quality only).
+  setRenderScale(scale, bloomOff = false) {
+    this.renderScale = scale;
+    this.bloom.enabled = this.q.bloom && !this.noHalf && !bloomOff;
+    if (this.w) this.resize(this.w, this.h);
   }
 
   _buildRain() {
-    const n = 3500, pos = new Float32Array(n * 6), end = new Float32Array(n * 2);
+    const n = this.q.rain, pos = new Float32Array(n * 6), end = new Float32Array(n * 2);
     for (let i = 0; i < n; i++) {
       const x = Math.random() * 60, y = Math.random() * 40, z = Math.random() * 60;
       pos.set([x, y, z, x, y, z], i * 6);
@@ -616,7 +659,9 @@ export class World {
 
   resize(w, h) {
     this.w = w; this.h = h;
+    this.renderer.setPixelRatio(pixelRatioFor(this.q, w, h, this.renderScale));
     this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
@@ -886,6 +931,7 @@ export class World {
     this.time += dt;
     const o = this.ocean;
     o.detail = this.mode === 'deck' || this.mode === 'title' || this.trans ? 1 : 0;
+    o.paused = this.contextLost;
     o.update(dt);
     this.sky.update(dt, this.camera.position);
     this.shake = Math.max(0, this.shake - dt * 1.3);
@@ -1158,5 +1204,5 @@ export class World {
     }
   }
 
-  render() { this.composer.render(); }
+  render() { if (!this.contextLost) this.composer.render(); }
 }
