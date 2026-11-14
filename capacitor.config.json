@@ -1,0 +1,36 @@
+{
+  "appId": "com.vincedelatorre.captainsgambit",
+  "appName": "Captain's Gambit",
+  "webDir": "dist",
+  "backgroundColor": "#04080a",
+  "zoomEnabled": false,
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "allowsLinkPreview": false,
+    "preferredContentMode": "mobile",
+    "backgroundColor": "#04080a"
+  },
+  "android": {
+    "backgroundColor": "#04080a",
+    "allowMixedContent": false,
+    "captureInput": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "launchAutoHide": true,
+      "launchFadeOutDuration": 400,
+      "backgroundColor": "#04080a",
+      "androidScaleType": "CENTER_CROP",
+      "showSpinner": false,
+      "splashFullScreen": true,
+      "splashImmersive": true
+    },
+    "SystemBars": {
+      "hidden": true,
+      "style": "DARK",
+      "insetsHandling": "css"
+    }
+  }
+}
