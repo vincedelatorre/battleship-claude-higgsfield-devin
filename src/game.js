@@ -885,8 +885,8 @@ export class Game {
     } else if (this.aim === 'ghostPlace') { this.ghostHoriz = !this.ghostHoriz; this.audio.play('click'); }
   }
   touchCancel() {
+    if (this.screen === 'placement' && this.dragShip >= 0) { this.touchAim = null; this.dragShip = -1; this.refresh(); return; }
     if (this.touchAim) { this.touchAim = null; return; }
-    if (this.screen === 'placement' && this.dragShip >= 0) { this.dragShip = -1; this.refresh(); return; }
     if (!this.cancelAim()) this.refresh();
   }
 
