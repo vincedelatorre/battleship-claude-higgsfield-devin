@@ -45,6 +45,40 @@ Anyone can play in their browser, nothing to install, music included:
 elsewhere. Open it from a web address, not by double-clicking the file: browsers mute page-processed
 audio on `file://` pages.
 
+## Mobile / native apps
+
+The same game ships as a native app for iPhone and iPad (one universal app) and Android phones and
+tablets, wrapped with [Capacitor](https://capacitorjs.com) 8. Every orientation, full screen (status
+bar and home indicator / navigation bar hidden, drawn edge to edge), no bounce or pinch zoom, screen
+kept awake while the app is open. Music, clips, models and fonts are all inside the app bundle, so it
+plays offline.
+
+```
+npm run build:mobile   # web bundle for the apps -> dist/ (Vite build, bundled fonts)
+npm run cap:sync       # build:mobile, then copy it into ios/ and android/
+npm run cap:android    # cap:sync, then open Android Studio (Run on a phone/tablet or emulator)
+npm run android:apk    # cap:sync, then build android/app/build/outputs/apk/debug/app-debug.apk
+npm run cap:ios        # cap:sync, then open Xcode (macOS only)
+npm run assets         # regenerate app icons and splash screens from public/assets/ui/title.jpg
+```
+
+- App id `com.vincedelatorre.captainsgambit`, name "Captain's Gambit". Config: `capacitor.config.json`.
+  Native projects: `ios/` (Swift Package Manager, no CocoaPods) and `android/`.
+- The apps load the Vite build (`dist/`), not the single-file site: files stay separate in the bundle,
+  so music and clips stream instead of being decoded from ~20 MB of base64 at launch.
+- Android needs JDK 21 and the Android SDK (Android Studio installs both). iOS needs a Mac with Xcode 26.
+- No Mac? The **Native apps** workflow (`.github/workflows/native.yml`) builds an Android debug APK and
+  an unsigned iOS simulator app on every push to `main`/`mobile-native` and every pull request, and
+  takes screenshots of the app running in an iPhone and an iPad simulator. Download them from the run's
+  **Artifacts**; install the APK with `adb install app-debug.apk` (or open it on the phone).
+- Still needs a Mac and an Apple Developer account: signing (set your Team in Xcode under
+  *Signing & Capabilities*), running on a real iPhone/iPad, TestFlight and App Store upload
+  (*Product → Archive*). Google Play needs a release keystore and `./gradlew bundleRelease`.
+
+**Install from the web (PWA).** The GitHub Pages build also installs full screen: on iPhone/iPad open
+it in Safari → Share → *Add to Home Screen*; on Android Chrome → *Install app*. `build:site` copies the
+web manifest (`public/manifest.webmanifest`) and icons (`public/icons/`) beside `index.html`.
+
 ## Audio settings
 
 The speaker button (bottom-left, every screen) opens the Audio panel: volume sliders for Master, Music (menus),

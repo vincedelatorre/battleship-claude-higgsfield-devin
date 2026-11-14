@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Captain\'s Gambit</string>
+    <string name="title_activity_main">Captain\'s Gambit</string>
+    <string name="package_name">com.vincedelatorre.captainsgambit</string>
+    <string name="custom_url_scheme">com.vincedelatorre.captainsgambit</string>
+</resources>

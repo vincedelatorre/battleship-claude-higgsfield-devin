@@ -37,9 +37,11 @@ export class Game {
     this.heart = 0;
     this.keys = {};
     this.mouse = { x: 0, y: 0, dx: 0, dy: 0 };
+    this.touchUI = false; this.touchAim = null; this.touchMove = null; this._tp = null; this._lookPtr = null;
     this.rng = makeRng((Date.now() & 0xffff) + 1);
     this._demoMatch();
     this._bindUI();
+    this._watchViewport();
     ui.probeArt(ui.artUrl('title', 'ui')).then((url) => { this.keyArt = url; if (url) $('#keyart').style.backgroundImage = `url("${url}")`; this._syncKeyArt(); });
     this._showScreen('title');
     world.onWaveCrash = (v) => this.audio.play('waveCrash', { vol: 0.8 * v, vary: 0.2 });
@@ -59,16 +61,80 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- layout
+  // Three arrangements: 'wide' (desktop: side panels beside the chart), 'port' (chart on top, HUD
+  // columns below) and 'land' (chart in the middle, slim HUD columns either side). The chart is the
+  // largest square, frame included, that leaves room for the HUD and stays inside the safe area.
   layout(w, h) {
     this.w = w; this.h = h;
-    const side = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--side')) || 290;
-    const top = 60, bottom = this.screen === 'battle' ? 92 : 30;
-    const size = Math.max(260, Math.min(h - top - bottom - 62, w - 2 * (side + 18) - 90));
-    this.world.setLayout({ cx: w / 2, cy: top + (h - top - bottom) / 2 + 8, size });
-    // Side panels sit a short, fixed distance from the chart's frame instead of the screen edge.
-    const frame = Math.max(18, (size / 10) * 0.42);
-    const inset = Math.max(12, w / 2 - size / 2 - frame - 16 - side);
-    document.documentElement.style.setProperty('--panel-inset', inset + 'px');
+    const root = document.documentElement;
+    root.classList.remove('lay-port', 'lay-land');
+    const sa = this._safeArea();
+    const side = parseFloat(getComputedStyle(root).getPropertyValue('--side')) || 290;
+    const hud = this.screen === 'battle' || this.screen === 'over';
+    const top = 60 + sa.t, bottom = (this.screen === 'battle' ? 92 : 30) + sa.b;
+    const midX = sa.l + (w - sa.l - sa.r) / 2;
+    const wideFit = Math.min(h - top - bottom - 62, w - sa.l - sa.r - 2 * (side + 18) - 90);
+    // Chart size whose square, with its frame (max(18, cell * 0.42) a side), fits in t px.
+    const fitIn = (t) => Math.max(120, t - 36 <= 428 ? t - 36 : t / 1.084);
+    const gap = 6;
+    let lay = wideFit >= 400 ? 'wide' : w > h * 1.1 ? 'land' : 'port';
+    this.lay = lay;
+    if (lay === 'wide') {
+      const size = Math.max(260, wideFit);
+      this.world.setLayout({ cx: midX, cy: top + (h - top - bottom) / 2 + 8, size });
+      // Side panels sit a short, fixed distance from the chart's frame instead of the screen edge.
+      const frame = Math.max(18, (size / 10) * 0.42);
+      const inset = Math.max(12, (w - sa.l - sa.r) / 2 - size / 2 - frame - 16 - side);
+      root.style.setProperty('--panel-inset', inset + 'px');
+      return;
+    }
+    root.classList.add('lay-' + lay);
+    if (lay === 'port') {
+      const topH = sa.t + 46, availW = w - sa.l - sa.r - 2 * gap;
+      const hudMin = Math.min(320, Math.max(250, h * 0.3));
+      const total = Math.max(160, Math.min(availW, h - topH - sa.b - hudMin - 2 * gap));
+      const hudTop = topH + gap + total + gap;
+      this.world.setLayout({ cx: midX, cy: topH + gap + total / 2, size: fitIn(total) });
+      const colW = (w - sa.l - sa.r - 3 * gap) / 2, colH = h - hudTop - sa.b - (hud ? 68 : 52);
+      root.style.setProperty('--hud-top', hudTop + 'px');
+      root.style.setProperty('--mini', Math.round(Math.max(90, Math.min(colW - 18, colH - 110, 260))) + 'px');
+    } else {
+      const avail = w - sa.l - sa.r;
+      let total = h - sa.t - sa.b - 2 * gap;
+      let cside = (avail - total - 4 * gap) / 2;
+      if (cside < 160) { cside = 160; total = avail - 4 * gap - 2 * cside; }
+      cside = Math.min(cside, 290);
+      this.world.setLayout({ cx: midX, cy: sa.t + gap + (h - sa.t - sa.b - 2 * gap) / 2, size: fitIn(total) });
+      const colH = h - sa.t - sa.b - 42 - 52;
+      root.style.setProperty('--cside', Math.floor(cside) + 'px');
+      root.style.setProperty('--mini', Math.round(Math.max(80, Math.min(cside - 18, colH - 110))) + 'px');
+    }
+  }
+  // env(safe-area-inset-*) in px, read from a hidden probe (custom properties keep env() unresolved).
+  _safeArea() {
+    let p = this._saProbe;
+    if (!p) {
+      p = this._saProbe = document.createElement('div');
+      p.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+      document.body.appendChild(p);
+    }
+    const cs = getComputedStyle(p);
+    return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+  }
+  // Re-run the resize path when the visible viewport changes without a window resize (iOS toolbars,
+  // rotation, Split View), but not while the page is pinch-zoomed.
+  _watchViewport() {
+    let raf = 0;
+    const kick = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const vv = window.visualViewport;
+        if ((vv && vv.scale > 1.01) || (this.w === innerWidth && this.h === innerHeight)) return;
+        dispatchEvent(new Event('resize'));
+      });
+    };
+    window.visualViewport?.addEventListener('resize', kick);
+    addEventListener('orientationchange', () => { kick(); setTimeout(kick, 350); });
   }
 
   // ---------------------------------------------------------------- screens
@@ -511,7 +577,7 @@ export class Game {
         if (m.side[0].waters.ships[i].isSunk()) { ui.toast("A sunk ship can't sail."); return; }
         this.ghostShip = i; this.ghostHoriz = m.side[0].waters.ships[i].pos.horizontal;
         this.aim = 'ghostPlace';
-        ui.toast(`Choose new water for your ${SHIPS[i].name}. R turns it.`);
+        ui.toast(`Choose new water for your ${SHIPS[i].name}. ${this.touchUI ? 'Rotate' : 'R'} turns it.`);
         break;
       }
       case 'ghostPlace': {
@@ -680,8 +746,8 @@ export class Game {
     }
     const lk = k.toLowerCase();
     if (lk === 'm') { this.audio.setMuted(!this.audio.muted); this._syncAudioUi?.(); ui.toast(this.audio.muted ? 'Sound off' : 'Sound on'); }
-    if (lk === 'k') { this.world.comfort = !this.world.comfort; ui.toast(this.world.comfort ? 'Comfort mode on: less shake, steady horizon' : 'Comfort mode off'); }
-    if (lk === 'f') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
+    if (lk === 'k') this.toggleComfort();
+    if (lk === 'f') this.toggleFullscreen();
     if (this.screen === 'title') {
       if (k === 'ArrowRight' || k === 'ArrowLeft') { this.sel = (this.sel + (k === 'ArrowRight' ? 1 : 3)) % 4; ui.selectCard(this.sel); this.audio.play('click'); }
       if (k === 'Enter') this.startPlacement();
@@ -694,12 +760,19 @@ export class Game {
       if (lk === 'g') this.useGambit();
       if (lk === 'r' && this.aim === 'ghostPlace') this.ghostHoriz = !this.ghostHoriz;
       if (lk === 'q' && this.world.mode === 'deck') this.setChartOpen(!this.chartOpen);
-      if (this.world.mode === 'deck' && k >= '1' && k <= '5') {
-        const i = Number(k) - 1;
-        if (i !== this.world.pov && this.world.selectShip(i)) { this.world.goTo('deck', 0, 1.1); this.refresh(); }
-        else if (this.match.side[0].waters.ships[i].isSunk()) ui.toast(`Your ${SHIPS[i].name} lies on the seabed.`);
-      }
+      if (this.world.mode === 'deck' && k >= '1' && k <= '5') this.boardShip(Number(k) - 1);
     }
+  }
+  toggleComfort() { this.world.comfort = !this.world.comfort; ui.toast(this.world.comfort ? 'Comfort mode on: less shake, steady horizon' : 'Comfort mode off'); }
+  toggleFullscreen() {
+    const d = document, el = d.documentElement;
+    if (d.fullscreenElement || d.webkitFullscreenElement) (d.exitFullscreen || d.webkitExitFullscreen)?.call(d);
+    else (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
+  }
+  boardShip(i) {
+    if (this.screen !== 'battle' || this.world.mode !== 'deck') return;
+    if (i !== this.world.pov && this.world.selectShip(i)) { this.world.goTo('deck', 0, 1.1); this.refresh(); }
+    else if (this.match.side[0].waters.ships[i].isSunk()) ui.toast(`Your ${SHIPS[i].name} lies on the seabed.`);
   }
   _rotateHeld() {
     if (this.dragShip >= 0) { this.dragHoriz = !this.dragHoriz; this.audio.play('click'); }
@@ -712,7 +785,7 @@ export class Game {
   }
   onMouseDown(e) {
     this.audio.start();
-    if (e.target.closest && e.target.closest('.panel, .btn, button, #audio-panel')) {
+    if (e.target.closest && e.target.closest('.panel, .btn, button, #audio-panel, #tc')) {
       if (e.target.id === 'seacanvas' && e.button === 0) this._seaChartClick(e);
       else if (e.target.id === 'seacanvas' && e.button === 2) this.cancelAim();
       return;
@@ -731,7 +804,7 @@ export class Game {
     if (!this.world.inChartView()) return;
     const c = this._hoverCell();
     if (!c) return;
-    if (this.screen === 'placement') this._placementClick(c.cell);
+    if (this.screen === 'placement') { this.hover = c.cell; this._placementClick(c.cell); }   // hover may still be the touch preview
     else if (this.screen === 'battle' && this.match.current === 0 && !this.busy() && this.aim) this._aimClick(c.cell, c.side);
   }
   _seaChartClick(e) {
@@ -743,14 +816,143 @@ export class Game {
   }
   _seaMap(r) { const pad = r.width * 0.07; return flatMap({ x: pad, y: pad, size: r.width - pad * 2 }); }
 
-  _hoverCell() {
+  _hoverCell(mx = this.mouse.x, my = this.mouse.y) {
     const w = this.world;
-    const p = w.pick(this.mouse.x, this.mouse.y);
+    const p = w.pick(mx, my);
     if (!p) return null;
     const side = w.chartSide;
     const x = Math.floor(p.x / 16), y = Math.floor((p.z - (side === 0 ? 0 : -420)) / 16);
     if (x < 0 || y < 0 || x >= N || y >= N) return null;
     return { cell: { x, y }, side };
+  }
+
+  // Touch and pen (Pointer Events). There is no hover, so aiming is two-step: the first tap (or a
+  // drag) previews a square, a second tap on it or the Fire button commits. Reversible picks
+  // (Broadside's first two squares, choosing a Ghost Ship) act on a single tap. In placement a tap
+  // picks up or drops a ship, and dragging moves it. On deck, dragging anywhere looks around.
+  onTouchDown(e) {
+    this.audio.start();
+    const t = e.target;
+    if (!t.closest || t.closest('#tc, #audio-panel, .modal')) return;
+    if (t.id === 'seacanvas') { if (this.chartOpen && this.screen === 'battle') this._touchAimDown(e, 'sea'); return; }
+    if (t.closest('.panel, .btn, button')) return;
+    if (t.id !== 'gl' && t.id !== 'overlay' && !t.classList?.contains('layer')) return;
+    if (this.world.mode === 'deck' && (this.screen === 'battle' || this.screen === 'over')) {
+      if (!this.paused && !this._lookPtr) this._lookPtr = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (!this.world.inChartView()) return;
+    if (this.screen === 'placement') this._touchPlaceDown(e);
+    else if (this.screen === 'battle') this._touchAimDown(e, 'chart');
+  }
+  onTouchMove(e) {
+    const lp = this._lookPtr;
+    if (lp && e.pointerId === lp.id) {
+      const k = 2.0;   // a finger drag turns further than a mouse: a full-width swipe is a good half turn
+      this.mouse.dx += (e.clientX - lp.x) * k; this.mouse.dy += (e.clientY - lp.y) * k;
+      lp.x = e.clientX; lp.y = e.clientY;
+      this._touchLooked = true;
+      return;
+    }
+    const tp = this._tp;
+    if (!tp || e.pointerId !== tp.id) return;
+    const h = this._touchCell(e.clientX, e.clientY, tp.where);
+    if (!h) { tp.moved = true; tp.confirm = false; return; }   // sliding off the chart aborts the tap
+    if ((h.cell.x === tp.cur.x && h.cell.y === tp.cur.y)) return;
+    tp.cur = h.cell;
+    if (h.cell.x !== tp.start.x || h.cell.y !== tp.start.y) { tp.moved = true; tp.confirm = false; }
+    if (tp.kind === 'place') { if (h.side === 0) this._setPlaceAim(h.cell); }
+    else if (h.side === this.aimSide && this._needsConfirm(h.cell)) this.touchAim = h;
+  }
+  onTouchUp(e) {
+    if (this._lookPtr && e.pointerId === this._lookPtr.id) { this._lookPtr = null; return; }
+    const tp = this._tp;
+    if (!tp || e.pointerId !== tp.id) return;
+    this._tp = null;
+    if (e.type === 'pointercancel') return;
+    if (tp.kind === 'place') {
+      if (this.screen === 'placement' && this.dragShip >= 0 && this.touchAim && (tp.moved || !tp.picked)) this._touchDrop();
+      return;
+    }
+    if (tp.moved || !this._canAim()) return;
+    if (tp.confirm || !this._needsConfirm(tp.start)) { this.touchAim = null; this._aimClick(tp.start, tp.side); }
+  }
+  _canAim() { return this.screen === 'battle' && this.match.current === 0 && !this.busy() && !!this.aim; }
+  _touchCell(x, y, where) {
+    if (where !== 'sea') return this._hoverCell(x, y);
+    const r = $('#seacanvas').getBoundingClientRect();
+    const cell = cellFromScreen(this._seaMap(r), x - r.left, y - r.top);
+    return cell ? { cell, side: this.aimSide } : null;
+  }
+  // Single-tap picks that are easy to undo; everything that spends the turn needs confirming.
+  _needsConfirm(c) {
+    if (this.aim === 'ghostPick') return false;
+    if (this.aim === 'broadside') return this.broadsideSel.length >= 2 && !this.broadsideSel.some((q) => q.x === c.x && q.y === c.y);
+    return true;
+  }
+  _touchAimDown(e, where) {
+    if (this._tp || !this._canAim()) return;
+    const h = this._touchCell(e.clientX, e.clientY, where);
+    if (!h || h.side !== this.aimSide) { this.touchAim = null; return; }
+    const ta = this.touchAim, same = !!ta && ta.side === h.side && ta.cell.x === h.cell.x && ta.cell.y === h.cell.y;
+    this._tp = { id: e.pointerId, kind: 'aim', where, side: h.side, start: h.cell, cur: h.cell, moved: false, confirm: same };
+    if (!same && this._needsConfirm(h.cell)) { this.touchAim = h; this.audio.play('click', { vol: 0.4 }); }
+  }
+  _touchHover() {
+    const w = this.world, ta = this.touchAim;
+    const key = `${this.screen}|${this.aim}|${this.aimSide}|${this.chartOpen}|${w.mode}|${this.match.current}`;
+    if (key !== this._touchKey) { this._touchKey = key; this.touchAim = null; this._tp = null; return null; }
+    if (!ta) return null;
+    if (this.screen === 'placement') return w.inChartView() ? ta.cell : null;
+    if (this.screen !== 'battle' || !this._canAim()) return null;
+    return w.inChartView() || this.chartOpen ? ta.cell : null;
+  }
+  // Placement: the square under the finger holds the part of the hull that was grabbed.
+  _setPlaceAim(at) {
+    if (this._grabShip !== this.dragShip) { this._grabShip = this.dragShip; this.touchGrab = { dx: 0, dy: 0 }; }
+    const g = this.touchGrab;
+    this.touchAim = { cell: { x: at.x - g.dx, y: at.y - g.dy }, side: 0, at };
+  }
+  _touchPlaceDown(e) {
+    if (this._tp) return;
+    const h = this._hoverCell(e.clientX, e.clientY);
+    if (!h || h.side !== 0) return;
+    const w = this.match.side[0].waters, c = h.cell;
+    const tp = { id: e.pointerId, kind: 'place', start: c, cur: c, moved: false, picked: false };
+    if (this.dragShip < 0) {
+      const i = w.shipAt(c.x, c.y);
+      if (i < 0) return;
+      const p = w.ships[i].pos;
+      this._placementClick(c);
+      tp.picked = true;
+      this._grabShip = i; this.touchGrab = { dx: c.x - p.x, dy: c.y - p.y };
+    }
+    this._tp = tp;
+    this._setPlaceAim(c);
+  }
+  _touchDrop() {
+    const w = this.match.side[0].waters, i = this.dragShip;
+    this.hover = this.touchAim.cell;
+    this._placementClick(this.hover);
+    if (w.ships[i].placed) { this.touchAim = null; this._grabShip = -1; }
+  }
+  touchConfirm() {
+    const ta = this.touchAim;
+    if (!ta || !this._canAim()) return;
+    this.touchAim = null;
+    this._aimClick(ta.cell, ta.side);
+  }
+  touchRotate() {
+    if (this.screen === 'placement' && this.dragShip >= 0) {
+      this._rotateHeld();
+      if (this._grabShip === this.dragShip) { const g = this.touchGrab; this.touchGrab = { dx: g.dy, dy: g.dx }; }
+      if (this.touchAim?.at) this._setPlaceAim(this.touchAim.at);
+    } else if (this.aim === 'ghostPlace') { this.ghostHoriz = !this.ghostHoriz; this.audio.play('click'); }
+  }
+  touchCancel() {
+    if (this.screen === 'placement' && this.dragShip >= 0) { this.touchAim = null; this.dragShip = -1; this.refresh(); return; }
+    if (this.touchAim) { this.touchAim = null; return; }
+    if (!this.cancelAim()) this.refresh();
   }
 
   // ---------------------------------------------------------------- DOM refresh
@@ -765,7 +967,7 @@ export class Game {
       $('#pl-opp').innerHTML = `<b style="font-family:var(--display);font-weight:normal;font-size:18px">${opp.name}</b><div style="font-size:14px;color:var(--sail-dim)">${this.mode === Mode.Gambit ? `Gambit: ${opp.gambitName}. ${opp.gambitDesc}` : opp.motto}</div>`;
       const w = m.side[0].waters, col = '#' + CAPTAINS[m.side[0].captain].color.toString(16).padStart(6, '0');
       $('#dock').innerHTML = SHIPS.map((s, i) => `<button class="dock-item ${w.ships[i].placed ? 'placed' : ''} ${this.dragShip === i ? 'held' : ''}" data-dock="${i}" style="--cap:${col}">
-        <div><b>${s.name}</b><span>${this.dragShip === i ? 'In hand: click a square' : w.ships[i].placed ? 'At sea' : 'In the dock'}</span></div>
+        <div><b>${s.name}</b><span>${this.dragShip === i ? (this.touchUI ? 'In hand: tap a square' : 'In hand: click a square') : w.ships[i].placed ? 'At sea' : 'In the dock'}</span></div>
         <div class="len">${'<i></i>'.repeat(s.length)}</div></button>`).join('');
       $('#ready').disabled = !w.fullyPlaced();
     }
@@ -797,7 +999,7 @@ export class Game {
       if (m.mode !== Mode.Gambit) { gb.className = 'panel gambit-bar std'; gb.innerHTML = '<span>Standard rules: one shot per turn, no Gambits.</span>'; }
       else {
         let state = me.gambitUsed ? 'spent' : this.aim && this.aim !== 'fire' ? 'aiming' : 'ready';
-        const sub = state === 'spent' ? 'Spent for this battle' : state === 'aiming' ? 'Aiming. Right-click or Esc to cancel.' : mine ? 'Ready. Press G or click to use it.' : 'Ready on your turn';
+        const sub = state === 'spent' ? 'Spent for this battle' : state === 'aiming' ? (this.touchUI ? 'Aiming. Tap here to cancel.' : 'Aiming. Right-click or Esc to cancel.') : mine ? (this.touchUI ? 'Ready. Tap to use it.' : 'Ready. Press G or click to use it.') : 'Ready on your turn';
         gb.className = `panel gambit-bar ${state === 'ready' && !mine ? '' : state}`;
         gb.innerHTML = `<div class="ico" style="color:var(--cap)">${ui.gambitIcon(cap.gambit)}</div><div><b>${cap.gambitName}</b><span>${sub}</span></div><kbd>G</kbd>`;
       }
@@ -840,8 +1042,9 @@ export class Game {
       this.audio.loop('wind', deck ? 0.3 : 0.2);
       this.audio.loop('sea', deck ? 0.4 : 0.22);
     }
-    // Hover cell in the chart view.
-    if (w.inChartView() && (this.screen === 'placement' || this.screen === 'battle')) {
+    // Hover cell in the chart view. Touch has no hover: the tapped preview cell stands in for it.
+    if (this.touchUI) this.hover = this._touchHover();
+    else if (w.inChartView() && (this.screen === 'placement' || this.screen === 'battle')) {
       const h = this._hoverCell();
       this.hover = h && (this.screen === 'placement' ? h.side === 0 : h.side === this.aimSide) ? h.cell : null;
     } else if (this.chartOpen && this.screen === 'battle') {
@@ -855,7 +1058,8 @@ export class Game {
       $('#battle').classList.toggle('hidden', wantDeck);
       if (wantDeck) this.refresh();
     }
-    $('#clicktolook').classList.toggle('hidden', !!document.pointerLockElement || this.chartOpen);
+    $('#clicktolook').classList.toggle('hidden', !!document.pointerLockElement || this.chartOpen || (this.touchUI && this._touchLooked));
+    this.touch?.sync();
   }
 
   worldDt(dt) {
@@ -865,8 +1069,8 @@ export class Game {
   }
 
   input() {
-    const k = this.keys, locked = !!document.pointerLockElement;
-    const i = { fwd: k.w || k.arrowup, back: k.s || k.arrowdown, left: k.a || k.arrowleft, right: k.d || k.arrowright, run: k.shift, look: locked || this.dragLook, dx: this.mouse.dx, dy: this.mouse.dy };
+    const k = this.keys, locked = !!document.pointerLockElement, t = this.touchMove || {};
+    const i = { fwd: k.w || k.arrowup || t.fwd, back: k.s || k.arrowdown || t.back, left: k.a || k.arrowleft || t.left, right: k.d || k.arrowright || t.right, run: k.shift || t.run, look: locked || this.dragLook || !!this._lookPtr, dx: this.mouse.dx, dy: this.mouse.dy };
     this.mouse.dx = this.mouse.dy = 0;
     if (this.chartOpen || this.paused) { i.fwd = i.back = i.left = i.right = false; }
     return i;

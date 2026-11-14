@@ -15,19 +15,23 @@ varying vec3 vDir;
 ${SKY_GLSL}
 void main() {
   vec3 d = normalize(vDir);
-  vec3 c = d.y < 0.0 ? horizonColor(d) : stormSky(d, true);
+  vec3 c = d.y < 0.0 ? horizonColor(d) : stormSky(d, SKY_CLOUDS);
   gl_FragColor = vec4(c, 1.0);
 }`;
 
 export class StormSky {
-  constructor(sharedUniforms) {
+  constructor(sharedUniforms, q = {}) {
     this.uniforms = {
       uTime: sharedUniforms.uTime, uFlash: sharedUniforms.uFlash,
       uFlashDir: sharedUniforms.uFlashDir, uSunDir: sharedUniforms.uSunDir,
     };
     this.mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(8000, 48, 24),
-      new THREE.ShaderMaterial({ vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: this.uniforms, side: THREE.BackSide, depthWrite: false }),
+      new THREE.SphereGeometry(8000, ...(q.skySegments || [48, 24])),
+      // Lower tiers skip the domain-warped cloud layer and use fewer noise octaves.
+      new THREE.ShaderMaterial({
+        vertexShader: SKY_VS, fragmentShader: SKY_FS, uniforms: this.uniforms, side: THREE.BackSide, depthWrite: false,
+        defines: { SKY_CLOUDS: q.skyClouds === false ? 'false' : 'true', FBM_OCT: q.fbmOctaves || 6 },
+      }),
     );
     this.mesh.renderOrder = -10;
     this.mesh.frustumCulled = false;
