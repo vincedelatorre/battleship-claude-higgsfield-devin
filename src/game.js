@@ -40,6 +40,7 @@ export class Game {
     this.rng = makeRng((Date.now() & 0xffff) + 1);
     this._demoMatch();
     this._bindUI();
+    this._watchViewport();
     ui.probeArt(ui.artUrl('title', 'ui')).then((url) => { this.keyArt = url; if (url) $('#keyart').style.backgroundImage = `url("${url}")`; this._syncKeyArt(); });
     this._showScreen('title');
     world.onWaveCrash = (v) => this.audio.play('waveCrash', { vol: 0.8 * v, vary: 0.2 });
@@ -59,16 +60,80 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- layout
+  // Three arrangements: 'wide' (desktop: side panels beside the chart), 'port' (chart on top, HUD
+  // columns below) and 'land' (chart in the middle, slim HUD columns either side). The chart is the
+  // largest square, frame included, that leaves room for the HUD and stays inside the safe area.
   layout(w, h) {
     this.w = w; this.h = h;
-    const side = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--side')) || 290;
-    const top = 60, bottom = this.screen === 'battle' ? 92 : 30;
-    const size = Math.max(260, Math.min(h - top - bottom - 62, w - 2 * (side + 18) - 90));
-    this.world.setLayout({ cx: w / 2, cy: top + (h - top - bottom) / 2 + 8, size });
-    // Side panels sit a short, fixed distance from the chart's frame instead of the screen edge.
-    const frame = Math.max(18, (size / 10) * 0.42);
-    const inset = Math.max(12, w / 2 - size / 2 - frame - 16 - side);
-    document.documentElement.style.setProperty('--panel-inset', inset + 'px');
+    const root = document.documentElement;
+    root.classList.remove('lay-port', 'lay-land');
+    const sa = this._safeArea();
+    const side = parseFloat(getComputedStyle(root).getPropertyValue('--side')) || 290;
+    const hud = this.screen === 'battle' || this.screen === 'over';
+    const top = 60 + sa.t, bottom = (this.screen === 'battle' ? 92 : 30) + sa.b;
+    const midX = sa.l + (w - sa.l - sa.r) / 2;
+    const wideFit = Math.min(h - top - bottom - 62, w - sa.l - sa.r - 2 * (side + 18) - 90);
+    // Chart size whose square, with its frame (max(18, cell * 0.42) a side), fits in t px.
+    const fitIn = (t) => Math.max(120, t - 36 <= 428 ? t - 36 : t / 1.084);
+    const gap = 6;
+    let lay = wideFit >= 400 ? 'wide' : w > h * 1.1 ? 'land' : 'port';
+    this.lay = lay;
+    if (lay === 'wide') {
+      const size = Math.max(260, wideFit);
+      this.world.setLayout({ cx: midX, cy: top + (h - top - bottom) / 2 + 8, size });
+      // Side panels sit a short, fixed distance from the chart's frame instead of the screen edge.
+      const frame = Math.max(18, (size / 10) * 0.42);
+      const inset = Math.max(12, (w - sa.l - sa.r) / 2 - size / 2 - frame - 16 - side);
+      root.style.setProperty('--panel-inset', inset + 'px');
+      return;
+    }
+    root.classList.add('lay-' + lay);
+    if (lay === 'port') {
+      const topH = sa.t + 46, availW = w - sa.l - sa.r - 2 * gap;
+      const hudMin = Math.min(320, Math.max(250, h * 0.3));
+      const total = Math.max(160, Math.min(availW, h - topH - sa.b - hudMin - 2 * gap));
+      const hudTop = topH + gap + total + gap;
+      this.world.setLayout({ cx: midX, cy: topH + gap + total / 2, size: fitIn(total) });
+      const colW = (w - sa.l - sa.r - 3 * gap) / 2, colH = h - hudTop - sa.b - (hud ? 68 : 52);
+      root.style.setProperty('--hud-top', hudTop + 'px');
+      root.style.setProperty('--mini', Math.round(Math.max(90, Math.min(colW - 18, colH - 110, 260))) + 'px');
+    } else {
+      const avail = w - sa.l - sa.r;
+      let total = h - sa.t - sa.b - 2 * gap;
+      let cside = (avail - total - 4 * gap) / 2;
+      if (cside < 160) { cside = 160; total = avail - 4 * gap - 2 * cside; }
+      cside = Math.min(cside, 290);
+      this.world.setLayout({ cx: midX, cy: sa.t + gap + (h - sa.t - sa.b - 2 * gap) / 2, size: fitIn(total) });
+      const colH = h - sa.t - sa.b - 42 - 52;
+      root.style.setProperty('--cside', Math.floor(cside) + 'px');
+      root.style.setProperty('--mini', Math.round(Math.max(80, Math.min(cside - 18, colH - 110))) + 'px');
+    }
+  }
+  // env(safe-area-inset-*) in px, read from a hidden probe (custom properties keep env() unresolved).
+  _safeArea() {
+    let p = this._saProbe;
+    if (!p) {
+      p = this._saProbe = document.createElement('div');
+      p.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+      document.body.appendChild(p);
+    }
+    const cs = getComputedStyle(p);
+    return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+  }
+  // Re-run the resize path when the visible viewport changes without a window resize (iOS toolbars,
+  // rotation, Split View), but not while the page is pinch-zoomed.
+  _watchViewport() {
+    let raf = 0;
+    const kick = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const vv = window.visualViewport;
+        if ((vv && vv.scale > 1.01) || (this.w === innerWidth && this.h === innerHeight)) return;
+        dispatchEvent(new Event('resize'));
+      });
+    };
+    window.visualViewport?.addEventListener('resize', kick);
+    addEventListener('orientationchange', () => { kick(); setTimeout(kick, 350); });
   }
 
   // ---------------------------------------------------------------- screens
